@@ -15,6 +15,7 @@ eggs/
 venv/
 env/
 ENV/
+.venv/
 
 # IDE / Editor
 .vscode/
@@ -28,6 +29,7 @@ ENV/
 
 # dotenv
 .env
+.env.example
 
 # MacOS
 .DS_Store

@@ -18,6 +18,7 @@ class Booking(Base):
     name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     seats = Column(Integer, default=1)
+    comment = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     ride = relationship("Ride")
