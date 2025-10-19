@@ -43,6 +43,8 @@ class AddRideStates(StatesGroup):
 # FSM for booking flow
 class BookingStates(StatesGroup):
     choosing_ride = State()
+    from_city = State()   
+    to_city = State()     
     phone = State()
     name = State()
     seats = State()
@@ -63,6 +65,7 @@ def get_public_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(text='/book')],
         [KeyboardButton(text='/parcel')],
         [KeyboardButton(text='/manager_login')],
+        [KeyboardButton(text='/автопарк')],  # додано
         [KeyboardButton(text='/help')],
     ], resize_keyboard=True)
     return kb
@@ -76,6 +79,7 @@ def get_manager_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(text='/add_ride')],
         [KeyboardButton(text='/ride_stats')],
         [KeyboardButton(text='/parcels_stats')],
+        [KeyboardButton(text='/автопарк')],  # додано
         [KeyboardButton(text='/manager_logout')],
         [KeyboardButton(text='/cancel')],
         [KeyboardButton(text='/help')],
@@ -91,6 +95,7 @@ async def set_commands():
         BotCommand(command="book", description="Забронювати місце"),
         BotCommand(command="parcel", description="Зареєструвати посилку"),
         BotCommand(command="manager_login", description="Вхід менеджера"),
+        BotCommand(command="avtopark", description="Переглянути автопарк"),  # додано (латинська команда для меню)
         BotCommand(command="help", description="Отримати довідку"),
     ], scope=BotCommandScopeDefault())
 
@@ -129,9 +134,26 @@ async def book_place(message: types.Message):
 async def book_select_ride(callback: types.CallbackQuery, state: FSMContext):
     ride_id = int(callback.data.split(":", 1)[1])
     await state.update_data(ride_id=ride_id)
-    await state.set_state(BookingStates.phone)
-    await callback.message.answer("Введіть, будь ласка, ваш телефонний номер:")
+    # Перший крок після вибору рейсу — спитати звідки (місто)
+    await state.set_state(BookingStates.from_city)
+    await callback.message.answer("Звідки ви виїжджаєте? Введіть назву міста:")
     await callback.answer()
+
+
+@dp.message(StateFilter(BookingStates.from_city))
+async def booking_from_city(message: types.Message, state: FSMContext):
+    from_city = message.text.strip()
+    await state.update_data(from_city=from_city)
+    await state.set_state(BookingStates.to_city)
+    await message.answer("Куди ви прямуєте? Введіть назву міста:")
+
+
+@dp.message(StateFilter(BookingStates.to_city))
+async def booking_to_city(message: types.Message, state: FSMContext):
+    to_city = message.text.strip()
+    await state.update_data(to_city=to_city)
+    await state.set_state(BookingStates.phone)
+    await message.answer("Введіть, будь ласка, ваш телефонний номер:")
 
 
 @dp.message(StateFilter(BookingStates.phone))
@@ -172,6 +194,8 @@ async def booking_comment(message: types.Message, state: FSMContext):
     phone = data.get('phone')
     name = data.get('name')
     seats = data.get('seats')
+    from_city = data.get('from_city')
+    to_city = data.get('to_city')
 
     db = SessionLocal()
     ride = db.query(Ride).filter(Ride.id == ride_id).with_for_update().first()
@@ -185,13 +209,39 @@ async def booking_comment(message: types.Message, state: FSMContext):
         db.close()
         await state.clear()
         return
-    booking = Booking(ride_id=ride_id, name=name, phone=phone, seats=seats, comment=comment)
+    booking = Booking(
+        ride_id=ride_id,
+        name=name,
+        phone=phone,
+        seats=seats,
+        comment=comment,
+        from_city=from_city,  # збереження звідки
+        to_city=to_city       # збереження куди
+    )
     db.add(booking)
     ride.seats_free -= seats
     db.commit()
     db.refresh(booking)
+
+    # Підготуємо інформацію для користувача перед закриттям сесії БД
+    ride_date = str(ride.date)
+    ride_direction = ride.direction
+    booking_id = booking.id
+
     db.close()
-    await message.answer(f"Бронювання підтверджено. id={booking.id}")
+
+    # Повідомлення клієнту з деталями бронювання і нагадуванням
+    msg = (
+        f"Бронювання підтверджено. id={booking_id}\n"
+        f"Рейс: {ride_date}  {ride_direction}\n"
+        f"Звідки: {from_city}\n"
+        f"Куди: {to_city}\n"
+        f"ПІБ: {name}\n"
+        f"Телефон: {phone}\n"
+        f"Місць: {seats}\n\n"
+        "За добу до виїзду ми з вами зв'яжемося для підтвердження та нагадування."
+    )
+    await message.answer(msg)
     await state.clear()
 
 
@@ -239,6 +289,7 @@ async def manager_login_key(message: types.Message, state: FSMContext):
                 BotCommand(command="add_ride", description="(менеджер) Додати рейс"),
                 BotCommand(command="ride_stats", description="(менеджер) Статистика рейсу"),
                 BotCommand(command="parcels_stats", description="(менеджер) Статистика посилок"),
+                BotCommand(command="avtopark", description="Переглянути автопарк"),  # додано
                 BotCommand(command="help", description="Отримати довідку")
             ]
             await bot.set_my_commands(full_cmds, scope=BotCommandScopeChatMember(chat_id=message.chat.id, user_id=message.from_user.id))
@@ -337,42 +388,105 @@ async def ride_stats(message: types.Message):
         await message.answer("Тільки менеджер може дивитися статистику")
         return
     parts = message.text.split()
-    if len(parts) < 2:
-        await message.answer("Використання: /ride_stats <ride_id>")
+    # Якщо передали id як аргумент — показати деталі одразу
+    if len(parts) >= 2:
+        try:
+            ride_id = int(parts[1])
+        except ValueError:
+            await message.answer("ride_id має бути числом")
+            return
+        db = SessionLocal()
+        ride = db.query(Ride).filter(Ride.id == ride_id).first()
+        if not ride:
+            await message.answer("Рейсу не знайдено")
+            db.close()
+            return
+        bookings = db.query(Booking).filter(Booking.ride_id == ride_id).all()
+        lines = [f"Рейс {ride.id}: {ride.date} {ride.direction}\nМісць: {ride.seats_total}, вільно: {ride.seats_free}\n"]
+        if not bookings:
+            lines.append("Броней: 0")
+        else:
+            lines.append(f"Броней: {len(bookings)}")
+            for b in bookings:
+                lines.append(
+                    f"- id={b.id} | {b.name} | тел: {b.phone} | місць: {b.seats} | {b.from_city or '-'} -> {b.to_city or '-'}"
+                    + (f" | примітка: {b.comment}" if b.comment else "")
+                )
+        await message.answer("\n".join(lines))
+        db.close()
         return
-    try:
-        ride_id = int(parts[1])
-    except ValueError:
-        await message.answer("ride_id має бути числом")
+
+    # Якщо id не вказано — показати список рейсів для вибору
+    db = SessionLocal()
+    rides = db.query(Ride).order_by(Ride.date).all()
+    if not rides:
+        await message.answer("Немає рейсів")
+        db.close()
         return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"{r.date} {r.direction} ({r.seats_free} вільно)", callback_data=f"ride_stats_select:{r.id}")]
+        for r in rides
+    ])
+    await message.answer("Оберіть рейс для перегляду детальної інформації:", reply_markup=kb)
+    db.close()
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("ride_stats_select:"))
+async def ride_stats_select(callback: types.CallbackQuery):
+    uid = callback.from_user.id
+    if not is_manager(uid):
+        await callback.answer("Тільки менеджер може виконувати цю дію", show_alert=True)
+        return
+    ride_id = int(callback.data.split(":", 1)[1])
     db = SessionLocal()
     ride = db.query(Ride).filter(Ride.id == ride_id).first()
     if not ride:
-        await message.answer("Рейсу не знайдено")
+        await callback.answer("Рейс не знайдено")
         db.close()
         return
-    # Порахувати броні
-    from models import Booking, Parcel
-    bookings_count = db.query(Booking).filter(Booking.ride_id == ride_id).count()
-    parcels_count = db.query(Parcel).filter(Parcel.direction == ride.direction).count()
-    await message.answer(f"Рейс {ride.id}: {ride.date} {ride.direction}\nБроней: {bookings_count}\nПосилок (той самий напрям): {parcels_count}")
+    bookings = db.query(Booking).filter(Booking.ride_id == ride_id).all()
+    lines = [f"Рейс {ride.id}: {ride.date} {ride.direction}\nМісць: {ride.seats_total}, вільно: {ride.seats_free}\n"]
+    if not bookings:
+        lines.append("Броней: 0")
+    else:
+        lines.append(f"Броней: {len(bookings)}")
+        for b in bookings:
+            lines.append(
+                f"- id={b.id} | {b.name} | тел: {b.phone} | місць: {b.seats} | {b.from_city or '-'} -> {b.to_city or '-'}"
+                + (f" | примітка: {b.comment}" if b.comment else "")
+            )
+    await callback.message.answer("\n".join(lines))
     db.close()
+    await callback.answer()
 
 
-@dp.message(Command("parcels_stats"))
-async def parcels_stats(message: types.Message):
-    if not is_manager(message.from_user.id):
-        await message.answer("Тільки менеджер може дивитися статистику посилок")
+# Обробник для перегляду автопарку — читає фото з папки "media" у корені проекту
+@dp.message(Command("автопарк"))
+async def show_fleet(message: types.Message):
+    images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media")
+    if not os.path.isdir(images_dir):
+        await message.answer(f"Папка з фото автопарку не знайдена: {images_dir}")
         return
-    db = SessionLocal()
-    from models import Parcel
-    total = db.query(Parcel).count()
-    by_dir = db.query(Parcel.direction, func.count(Parcel.id)).group_by(Parcel.direction).all()
-    lines = [f"Всього посилок: {total}"]
-    for direction, cnt in by_dir:
-        lines.append(f"{direction}: {cnt}")
-    await message.answer("\n".join(lines))
-    db.close()
+
+    files = [
+        os.path.join(images_dir, f)
+        for f in sorted(os.listdir(images_dir))
+        if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))
+    ]
+    if not files:
+        await message.answer("Поки немає фото автопарку.")
+        return
+
+    # Надсилаємо файли по одному (надійно для локальних шляхів)
+    for idx, fp in enumerate(files):
+        caption = "Наш автопарк — фото салону/бусу" if idx == 0 else None
+        try:
+            file = types.FSInputFile(fp)
+            await bot.send_photo(chat_id=message.chat.id, photo=file, caption=caption)
+        except Exception as e:
+            await message.answer(f"Не вдалось надіслати {os.path.basename(fp)}: {e}")
+
+    await message.answer("Якщо потрібно — зверніться за деталями по конкретному бусу.")
 
 
 # Тестове повідомлення на будь-який текст
