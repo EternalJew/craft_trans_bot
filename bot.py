@@ -56,6 +56,17 @@ class ManagerLoginStates(StatesGroup):
     await_key = State()
 
 
+class CancelBookingStates(StatesGroup):
+    await_id = State()
+    await_phone = State()
+
+class EditBookingStates(StatesGroup):
+    await_id = State()
+    await_phone = State()
+    new_seats = State()
+    new_comment = State()
+
+
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 
@@ -97,6 +108,8 @@ async def set_commands():
         BotCommand(command="manager_login", description="Вхід менеджера"),
         BotCommand(command="avtopark", description="Переглянути автопарк"),  # додано (латинська команда для меню)
         BotCommand(command="help", description="Отримати довідку"),
+        BotCommand(command="cancel_booking", description="Скасувати бронювання (введіть id або запустіть і далі слідкуйте)"),
+        BotCommand(command="change_booking", description="Змінити бронювання (id або інтерактивно)")
     ], scope=BotCommandScopeDefault())
 
 
