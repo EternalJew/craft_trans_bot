@@ -4,6 +4,12 @@ from aiogram.filters import Command
 from aiogram.filters.state import StateFilter
 from aiogram.types import BotCommand, BotCommandScopeChatMember, BotCommandScopeDefault
 from dotenv import load_dotenv
+import os
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.filters.state import StateFilter
+from aiogram.types import BotCommand, BotCommandScopeChatMember, BotCommandScopeDefault
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import SessionLocal, engine
@@ -67,6 +73,166 @@ class EditBookingStates(StatesGroup):
     new_comment = State()
 
 
+class ViewBookingStates(StatesGroup):
+    await_phone = State()
+
+
+# --- Cancel booking interactive flow ---
+@dp.message(Command("cancel_booking"))
+async def cancel_booking_start(message: types.Message, state: FSMContext):
+    # Start by asking for phone number to find user's bookings
+    await state.set_state(CancelBookingStates.await_phone)
+    await message.answer("Для скасування бронювання введіть, будь ласка, ваш телефон (наприклад +380XXXXXXXXX):")
+
+
+@dp.message(StateFilter(CancelBookingStates.await_phone))
+async def cancel_booking_find(message: types.Message, state: FSMContext):
+    phone = message.text.strip()
+    db = SessionLocal()
+    bookings = db.query(Booking).filter(Booking.phone == phone).all()
+    if not bookings:
+        await message.answer("За вказаним номером бронювань не знайдено.")
+        db.close()
+        await state.clear()
+        return
+    # Build inline keyboard of bookings for this phone
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"id={b.id} {b.from_city or '-'}->{b.to_city or '-'} {b.seats} місць ({b.created_at.date() if hasattr(b,'created_at') else ''})", callback_data=f"cancel_select:{b.id}")]
+        for b in bookings
+    ])
+    await message.answer("Оберіть бронювання для скасування:", reply_markup=kb)
+    db.close()
+    await state.clear()
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("cancel_select:"))
+async def cancel_select(callback: types.CallbackQuery):
+    booking_id = int(callback.data.split(":", 1)[1])
+    db = SessionLocal()
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        await callback.answer("Бронювання не знайдено", show_alert=True)
+        db.close()
+        return
+    # Refund seats
+    ride = db.query(Ride).filter(Ride.id == booking.ride_id).first()
+    if ride:
+        ride.seats_free = (ride.seats_free or 0) + booking.seats
+    db.delete(booking)
+    db.commit()
+    db.close()
+    await callback.message.answer(f"Бронювання id={booking_id} успішно скасовано.")
+    await callback.answer()
+
+
+# --- Change booking interactive flow ---
+@dp.message(Command("change_booking"))
+async def change_booking_start(message: types.Message, state: FSMContext):
+    await state.set_state(EditBookingStates.await_phone)
+    await message.answer("Щоб змінити бронювання, введіть, будь ласка, ваш телефон:")
+
+
+@dp.message(StateFilter(EditBookingStates.await_phone))
+async def change_booking_find(message: types.Message, state: FSMContext):
+    phone = message.text.strip()
+    db = SessionLocal()
+    bookings = db.query(Booking).filter(Booking.phone == phone).all()
+    if not bookings:
+        await message.answer("За вказаним номером бронювань не знайдено.")
+        db.close()
+        await state.clear()
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"id={b.id} {b.from_city or '-'}->{b.to_city or '-'} {b.seats} місць", callback_data=f"change_select:{b.id}")]
+        for b in bookings
+    ])
+    await message.answer("Оберіть бронювання для редагування:", reply_markup=kb)
+    db.close()
+    await state.clear()
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("change_select:"))
+async def change_select(callback: types.CallbackQuery, state: FSMContext):
+    booking_id = int(callback.data.split(":", 1)[1])
+    await state.update_data(edit_booking_id=booking_id)
+    await state.set_state(EditBookingStates.new_seats)
+    await callback.message.answer("Введіть нову кількість місць (ціле число):")
+    await callback.answer()
+
+
+@dp.message(StateFilter(EditBookingStates.new_seats))
+async def change_new_seats(message: types.Message, state: FSMContext):
+    try:
+        new_seats = int(message.text.strip())
+    except ValueError:
+        await message.answer("Введіть, будь ласка, ціле число")
+        return
+    data = await state.get_data()
+    booking_id = data.get('edit_booking_id')
+    db = SessionLocal()
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        await message.answer("Бронювання не знайдено")
+        db.close()
+        await state.clear()
+        return
+    ride = db.query(Ride).filter(Ride.id == booking.ride_id).with_for_update().first()
+    if not ride:
+        await message.answer("Рейс не знайдено")
+        db.close()
+        await state.clear()
+        return
+    # Calculate seats available if we free current booking seats first
+    available = ride.seats_free + booking.seats
+    if new_seats > available:
+        await message.answer(f"Недостатньо місць. Максимально доступно (включно з вашим поточним бронюванням): {available}")
+        db.close()
+        return
+    # proceed to ask for new comment
+    await state.update_data(new_seats=new_seats)
+    await state.set_state(EditBookingStates.new_comment)
+    await message.answer("Введіть нову примітку (або надішліть '-' щоб залишити без змін):")
+    db.close()
+
+
+@dp.message(StateFilter(EditBookingStates.new_comment))
+async def change_new_comment(message: types.Message, state: FSMContext):
+    comment = message.text.strip()
+    if comment == '-':
+        comment = None
+    data = await state.get_data()
+    booking_id = data.get('edit_booking_id')
+    new_seats = data.get('new_seats')
+    db = SessionLocal()
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        await message.answer("Бронювання не знайдено")
+        db.close()
+        await state.clear()
+        return
+    ride = db.query(Ride).filter(Ride.id == booking.ride_id).with_for_update().first()
+    if not ride:
+        await message.answer("Рейс не знайдено")
+        db.close()
+        await state.clear()
+        return
+    # refund current seats and take new ones
+    ride.seats_free = (ride.seats_free or 0) + booking.seats
+    if new_seats > ride.seats_free:
+        await message.answer(f"Після перерахунку недостатньо місць. Доступно: {ride.seats_free}")
+        db.close()
+        await state.clear()
+        return
+    # apply change
+    ride.seats_free -= new_seats
+    booking.seats = new_seats
+    booking.comment = comment
+    db.commit()
+    db.close()
+    await message.answer(f"Бронювання id={booking_id} успішно оновлено.")
+    await state.clear()
+
+
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 
@@ -109,7 +275,8 @@ async def set_commands():
         BotCommand(command="avtopark", description="Переглянути автопарк"),  # додано (латинська команда для меню)
         BotCommand(command="help", description="Отримати довідку"),
         BotCommand(command="cancel_booking", description="Скасувати бронювання (введіть id або запустіть і далі слідкуйте)"),
-        BotCommand(command="change_booking", description="Змінити бронювання (id або інтерактивно)")
+        BotCommand(command="change_booking", description="Змінити бронювання (id або інтерактивно)"),
+        BotCommand(command="my_bookings", description="Переглянути мої бронювання")
     ], scope=BotCommandScopeDefault())
 
 
@@ -262,6 +429,33 @@ async def booking_comment(message: types.Message, state: FSMContext):
 @dp.message(Command("parcel"))
 async def register_parcel(message: types.Message):
     await message.answer("Функція реєстрації посилки в процесі розробки")
+
+
+@dp.message(Command("my_bookings"))
+async def my_bookings_start(message: types.Message, state: FSMContext):
+    await state.set_state(ViewBookingStates.await_phone)
+    await message.answer("Щоб переглянути ваші бронювання, введіть, будь ласка, телефон:")
+
+
+@dp.message(StateFilter(ViewBookingStates.await_phone))
+async def my_bookings_list(message: types.Message, state: FSMContext):
+    phone = message.text.strip()
+    db = SessionLocal()
+    bookings = db.query(Booking).filter(Booking.phone == phone).all()
+    if not bookings:
+        await message.answer("Бронювань за цим номером не знайдено.")
+        db.close()
+        await state.clear()
+        return
+    lines = []
+    for b in bookings:
+        db_ride = db.query(Ride).filter(Ride.id == b.ride_id).first()
+        lines.append(
+            f"id={b.id} | Рейс: {db_ride.date if db_ride else '-'} {db_ride.direction if db_ride else '-'} | {b.from_city or '-'}-> {b.to_city or '-'} | місць: {b.seats} | примітка: {b.comment or '-'}"
+        )
+    await message.answer("\n".join(lines))
+    db.close()
+    await state.clear()
 
 
 # /help – показати команди
@@ -499,8 +693,6 @@ async def show_fleet(message: types.Message):
         except Exception as e:
             await message.answer(f"Не вдалось надіслати {os.path.basename(fp)}: {e}")
 
-    await message.answer("Якщо потрібно — зверніться за деталями по конкретному бусу.")
-
 
 # Тестове повідомлення на будь-який текст
 @dp.message()
@@ -517,3 +709,4 @@ if __name__ == "__main__":
         await dp.start_polling(bot)  # запускаємо polling
 
     asyncio.run(main())
+
