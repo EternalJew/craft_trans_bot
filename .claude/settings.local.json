@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create vite@latest frontend -- --template react)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,''backend''\\); from backend.database import Base; print\\(''OK''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(winget --version)",
+      "Bash(winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/nodejs\")",
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "Bash(npm install)"
+    ]
+  }
+}

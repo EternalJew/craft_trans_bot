@@ -29,7 +29,10 @@ ENV/
 
 # dotenv
 .env
-.env.example
+
+# Node
+node_modules/
+frontend/dist/
 
 # MacOS
 .DS_Store
