@@ -10,8 +10,8 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 from database import engine, get_db
 import models
 import schemas
-from auth import authenticate_manager, create_access_token
-from routers import routes, rides, bookings, parcels
+from auth import authenticate_user, create_access_token
+from routers import routes, rides, bookings, parcels, users, driver
 
 # Create all tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -30,6 +30,8 @@ app.include_router(routes.router)
 app.include_router(rides.router)
 app.include_router(bookings.router)
 app.include_router(parcels.router)
+app.include_router(users.router)
+app.include_router(driver.router)
 
 
 @app.post("/auth/token", response_model=schemas.Token)
@@ -37,14 +39,14 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    manager = authenticate_manager(db, form_data.username, form_data.password)
-    if not manager:
+    user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
-    token = create_access_token({"sub": manager.username})
-    return {"access_token": token, "token_type": "bearer"}
+    token = create_access_token({"sub": user.username})
+    return {"access_token": token, "token_type": "bearer", "role": user.role}
 
 
 @app.get("/health")

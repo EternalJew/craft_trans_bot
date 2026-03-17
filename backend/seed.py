@@ -22,9 +22,9 @@ db = SessionLocal()
 admin_username = os.getenv("ADMIN_USERNAME", "admin")
 admin_password = os.getenv("ADMIN_PASSWORD", "admin")
 
-existing = db.query(models.Manager).filter(models.Manager.username == admin_username).first()
+existing = db.query(models.User).filter(models.User.username == admin_username).first()
 if not existing:
-    admin = models.Manager(
+    admin = models.User(
         username=admin_username,
         password_hash=hash_password(admin_password),
         role="admin",
@@ -68,13 +68,12 @@ if not existing_route:
         seats_total=8,
         seats_free=8,
         vehicle="VW Crafter",
-        driver="Іван Петренко",
         price=1200,
         status="active",
     )
     db.add(ride)
     db.commit()
-    print(f"Created route '{route.name}' with {len(stops_data)} stops and 1 sample ride")
+    print(f"Created route (id={route.id}) with {len(stops_data)} stops and 1 sample ride")
 else:
     print("Routes already seeded")
 

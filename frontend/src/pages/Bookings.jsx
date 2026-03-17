@@ -63,7 +63,7 @@ export default function BookingsPage() {
         {selectedRideData && (
           <div className="mt-3 flex gap-6 text-sm text-gray-600">
             <span>Транспорт: <b>{selectedRideData.vehicle || '—'}</b></span>
-            <span>Водій: <b>{selectedRideData.driver || '—'}</b></span>
+            <span>Водій: <b>{selectedRideData.driver?.full_name || '—'}</b></span>
             <span>Ціна: <b>{selectedRideData.price ? `${selectedRideData.price} грн` : '—'}</b></span>
             <span>
               Заповненість:{' '}

@@ -4,6 +4,7 @@ import RoutesPage from './pages/Routes'
 import RidesPage from './pages/Rides'
 import BookingsPage from './pages/Bookings'
 import ParcelsPage from './pages/Parcels'
+import DriverMapPage from './pages/DriverMap'
 import Layout from './components/Layout'
 
 function RequireAuth({ children }) {
@@ -28,7 +29,8 @@ export default function App() {
           <Route path="routes"   element={<RoutesPage />} />
           <Route path="rides"    element={<RidesPage />} />
           <Route path="bookings" element={<BookingsPage />} />
-          <Route path="parcels"  element={<ParcelsPage />} />
+          <Route path="parcels"     element={<ParcelsPage />} />
+          <Route path="driver-map" element={<DriverMapPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

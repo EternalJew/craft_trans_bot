@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 const links = [
-  { to: '/routes',   label: 'Маршрути',   icon: '🗺️' },
-  { to: '/rides',    label: 'Рейси',      icon: '🚐' },
-  { to: '/bookings', label: 'Бронювання', icon: '🎫' },
-  { to: '/parcels',  label: 'Посилки',    icon: '📦' },
+  { to: '/routes',     label: 'Маршрути',   icon: '🗺️' },
+  { to: '/rides',      label: 'Рейси',      icon: '🚐' },
+  { to: '/bookings',   label: 'Бронювання', icon: '🎫' },
+  { to: '/parcels',    label: 'Посилки',    icon: '📦' },
+  { to: '/driver-map', label: 'Навігація',  icon: '🧭' },
 ]
 
 export default function Layout() {

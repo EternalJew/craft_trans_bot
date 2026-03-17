@@ -4,7 +4,7 @@ from typing import List, Optional
 import models
 import schemas
 from database import get_db
-from auth import get_current_manager
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 

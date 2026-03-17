@@ -105,7 +105,7 @@ export default function RidesPage() {
                   <div className="text-xs text-gray-400">{r.route?.direction}</div>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{r.vehicle || '—'}</td>
-                <td className="px-4 py-3 text-gray-600">{r.driver || '—'}</td>
+                <td className="px-4 py-3 text-gray-600">{r.driver?.full_name || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className="text-sm">
