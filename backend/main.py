@@ -11,7 +11,7 @@ from database import engine, get_db
 import models
 import schemas
 from auth import authenticate_user, create_access_token
-from routers import routes, rides, bookings, parcels, users, driver
+from routers import routes, rides, bookings, parcels, users, driver, vehicles
 
 # Create all tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -32,6 +32,7 @@ app.include_router(bookings.router)
 app.include_router(parcels.router)
 app.include_router(users.router)
 app.include_router(driver.router)
+app.include_router(vehicles.router)
 
 
 @app.post("/auth/token", response_model=schemas.Token)

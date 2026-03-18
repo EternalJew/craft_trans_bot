@@ -5,7 +5,9 @@ const links = [
   { to: '/rides',      label: 'Рейси',      icon: '🚐' },
   { to: '/bookings',   label: 'Бронювання', icon: '🎫' },
   { to: '/parcels',    label: 'Посилки',    icon: '📦' },
-  { to: '/driver-map', label: 'Навігація',  icon: '🧭' },
+  { to: '/driver-map',    label: 'Навігація',      icon: '🧭' },
+  { to: '/profitability', label: 'Рентабельність', icon: '💰' },
+  { to: '/vehicles',      label: 'Автопарк',       icon: '🚐' },
 ]
 
 export default function Layout() {

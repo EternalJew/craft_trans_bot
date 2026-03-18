@@ -144,6 +144,46 @@ class ParcelOut(ParcelBase):
     model_config = {"from_attributes": True}
 
 
+# ── Vehicle ───────────────────────────────────────────────────────────────────
+
+class MaintenanceRecordCreate(BaseModel):
+    date:            date
+    mileage:         int
+    work_type:       str
+    description:     Optional[str] = None
+    cost:            Optional[float] = None
+    next_service_km: Optional[int] = None
+
+class MaintenanceRecordOut(MaintenanceRecordCreate):
+    id:         int
+    vehicle_id: int
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+class VehicleCreate(BaseModel):
+    name:            str
+    plate:           str
+    make:            Optional[str] = None
+    model_name:      Optional[str] = None
+    year:            Optional[int] = None
+    mileage_current: int = 0
+    notes:           Optional[str] = None
+
+class VehicleUpdate(BaseModel):
+    name:            Optional[str] = None
+    plate:           Optional[str] = None
+    make:            Optional[str] = None
+    model_name:      Optional[str] = None
+    year:            Optional[int] = None
+    mileage_current: Optional[int] = None
+    notes:           Optional[str] = None
+
+class VehicleOut(VehicleCreate):
+    id:          int
+    maintenance: List[MaintenanceRecordOut] = []
+    model_config = {"from_attributes": True}
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 class Token(BaseModel):

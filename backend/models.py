@@ -94,3 +94,37 @@ class Parcel(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
 
     ride = relationship("Ride", back_populates="parcels")
+
+
+# ── Vehicle tracking ───────────────────────────────────────────────────────────
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+    id              = Column(Integer, primary_key=True, index=True)
+    name            = Column(String, nullable=False)   # e.g. "Ford Transit #1"
+    plate           = Column(String, nullable=False)
+    make            = Column(String, nullable=True)    # Ford
+    model_name      = Column(String, nullable=True)    # Transit
+    year            = Column(Integer, nullable=True)
+    mileage_current = Column(Integer, nullable=False, default=0)
+    notes           = Column(Text, nullable=True)
+
+    maintenance = relationship(
+        "MaintenanceRecord", back_populates="vehicle",
+        cascade="all, delete-orphan",
+    )
+
+
+class MaintenanceRecord(Base):
+    __tablename__ = "maintenance_records"
+    id              = Column(Integer, primary_key=True, index=True)
+    vehicle_id      = Column(Integer, ForeignKey("vehicles.id"), nullable=False)
+    date            = Column(Date, nullable=False)
+    mileage         = Column(Integer, nullable=False)   # km at time of service
+    work_type       = Column(String, nullable=False)    # oil_change | brake_pads | timing_belt | tires | filters | battery | other
+    description     = Column(Text, nullable=True)
+    cost            = Column(Float, nullable=True)      # EUR
+    next_service_km = Column(Integer, nullable=True)    # mileage at which to do it again
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+    vehicle = relationship("Vehicle", back_populates="maintenance")
