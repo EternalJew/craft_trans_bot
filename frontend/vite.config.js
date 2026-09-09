@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // The landing page owns "/", so the dashboard lives under /admin
+  base: '/admin/',
   server: {
     port: 5173,
     proxy: {
