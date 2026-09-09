@@ -51,7 +51,14 @@ export const updateBooking  = (id, data) => api.patch(`/api/bookings/${id}`, dat
 export const cancelBooking  = (id)    => api.delete(`/api/bookings/${id}`)
 
 // ── Parcels ───────────────────────────────────────────────────────────────────
-export const getParcels     = ()      => api.get('/api/parcels')
+export const getParcels     = (params) => api.get('/api/parcels', { params })
 export const createParcel   = (data)  => api.post('/api/parcels', data)
+export const updateParcel   = (id, data) => api.patch(`/api/parcels/${id}`, data)
 export const updateParcelStatus = (id, status) => api.patch(`/api/parcels/${id}/status`, { status })
 export const deleteParcel   = (id)    => api.delete(`/api/parcels/${id}`)
+export const uploadParcelPhoto = (id, file, kind = 'intake') => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post(`/api/parcels/${id}/photos`, form, { params: { kind } })
+}
+export const parcelPhotoUrl = (filename) => `/media/parcels/${filename}`

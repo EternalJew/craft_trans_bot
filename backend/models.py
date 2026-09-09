@@ -91,19 +91,38 @@ class Booking(Base):
 
 class Parcel(Base):
     __tablename__ = "parcels"
-    id             = Column(Integer, primary_key=True, index=True)
-    ride_id        = Column(Integer, ForeignKey("rides.id"), nullable=True)
-    direction      = Column(String, nullable=False)
-    sender         = Column(String, nullable=False)
-    sender_phone   = Column(String, nullable=False)
-    receiver       = Column(String, nullable=False)
-    receiver_phone = Column(String, nullable=False)
-    np_office      = Column(String, nullable=False)
-    description    = Column(Text, nullable=True)
-    status         = Column(String, default="pending")  # "pending" | "in_transit" | "delivered"
-    created_at     = Column(DateTime, default=datetime.utcnow)
+    id              = Column(Integer, primary_key=True, index=True)
+    tracking_number = Column(String, unique=True, nullable=False, index=True)
+    ride_id         = Column(Integer, ForeignKey("rides.id"), nullable=True)
+    direction       = Column(String, nullable=False)
+    sender          = Column(String, nullable=False)
+    sender_phone    = Column(String, nullable=False)
+    sender_address  = Column(String, nullable=True)   # where we pick it up
+    receiver        = Column(String, nullable=False)
+    receiver_phone  = Column(String, nullable=False)
+    receiver_address = Column(String, nullable=True)  # door-to-door delivery
+    np_office       = Column(String, nullable=True)   # or a Nova Poshta office
+    description     = Column(Text, nullable=True)
+    price           = Column(Integer, nullable=True)
+    # accepted | in_transit | border_crossed | out_for_delivery | delivered
+    status          = Column(String, default="accepted")
+    sender_telegram_id = Column(Integer, nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    delivered_at    = Column(DateTime, nullable=True)
 
-    ride = relationship("Ride", back_populates="parcels")
+    ride   = relationship("Ride", back_populates="parcels")
+    photos = relationship("ParcelPhoto", back_populates="parcel", cascade="all, delete-orphan")
+
+
+class ParcelPhoto(Base):
+    __tablename__ = "parcel_photos"
+    id         = Column(Integer, primary_key=True, index=True)
+    parcel_id  = Column(Integer, ForeignKey("parcels.id"), nullable=False)
+    filename   = Column(String, nullable=False)
+    kind       = Column(String, default="intake")  # "intake" | "delivery"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    parcel = relationship("Parcel", back_populates="photos")
 
 
 # ── Notifications ──────────────────────────────────────────────────────────────

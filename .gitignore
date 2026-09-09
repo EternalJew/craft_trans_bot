@@ -27,6 +27,9 @@ ENV/
 *.db
 *.sqlite3
 
+# Customer parcel photos
+media/parcels/
+
 # dotenv
 .env
 

@@ -58,6 +58,27 @@ async def api_delete(path: str):
         return r.json()
 
 
+async def api_upload(path: str, content: bytes, filename: str):
+    async with httpx.AsyncClient() as c:
+        r = await c.post(
+            f"{API_BASE}{path}",
+            files={"file": (filename, content, "image/jpeg")},
+            headers=HEADERS,
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+PARCEL_STATUS_LABELS = {
+    "accepted":         "прийнято",
+    "in_transit":       "в дорозі",
+    "border_crossed":   "перетнула кордон",
+    "out_for_delivery": "сьогодні доставка",
+    "delivered":        "доставлено",
+}
+
+
 # ── FSM States ────────────────────────────────────────────────────────────────
 
 class BookingStates(StatesGroup):
@@ -87,13 +108,20 @@ class ViewBookingStates(StatesGroup):
 
 
 class ParcelStates(StatesGroup):
-    direction      = State()
-    sender         = State()
-    sender_phone   = State()
-    receiver       = State()
-    receiver_phone = State()
-    np_office      = State()
-    description    = State()
+    direction        = State()
+    sender           = State()
+    sender_phone     = State()
+    sender_address   = State()
+    receiver         = State()
+    receiver_phone   = State()
+    delivery_kind    = State()
+    delivery_target  = State()
+    description      = State()
+    photo            = State()
+
+
+class TrackStates(StatesGroup):
+    await_number = State()
 
 
 # ── Keyboards ─────────────────────────────────────────────────────────────────
@@ -103,6 +131,7 @@ def public_kb():
         [KeyboardButton(text='/rides')],
         [KeyboardButton(text='/book')],
         [KeyboardButton(text='/parcel')],
+        [KeyboardButton(text='/track')],
         [KeyboardButton(text='/my_bookings')],
         [KeyboardButton(text='/автопарк')],
         [KeyboardButton(text='/help')],
@@ -138,6 +167,7 @@ async def cmd_help(message: types.Message):
         "/rides — переглянути рейси\n"
         "/book — забронювати місце\n"
         "/parcel — відправити посилку\n"
+        "/track — статус посилки за трек-номером\n"
         "/my_bookings — мої бронювання\n"
         "/cancel_booking — скасувати бронювання\n"
         "/change_booking — змінити бронювання\n"
@@ -562,12 +592,27 @@ async def parcel_direction(callback: types.CallbackQuery, state: FSMContext):
 async def parcel_sender(message: types.Message, state: FSMContext):
     await state.update_data(sender=message.text.strip())
     await state.set_state(ParcelStates.sender_phone)
-    await message.answer("Телефон відправника:")
+    await message.answer("Телефон відправника:", reply_markup=phone_kb())
 
 
 @dp.message(StateFilter(ParcelStates.sender_phone))
 async def parcel_sender_phone(message: types.Message, state: FSMContext):
-    await state.update_data(sender_phone=message.text.strip())
+    phone = message.contact.phone_number if message.contact else (message.text or "").strip()
+    if not phone:
+        await message.answer("Надішліть номер текстом або кнопкою нижче:", reply_markup=phone_kb())
+        return
+    await state.update_data(sender_phone=phone)
+    await link_contact(phone, message.from_user)
+    await state.set_state(ParcelStates.sender_address)
+    await message.answer(
+        "Адреса, звідки забрати посилку (місто, вулиця, будинок):",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+
+
+@dp.message(StateFilter(ParcelStates.sender_address))
+async def parcel_sender_address(message: types.Message, state: FSMContext):
+    await state.update_data(sender_address=message.text.strip())
     await state.set_state(ParcelStates.receiver)
     await message.answer("ПІБ отримувача:")
 
@@ -582,46 +627,132 @@ async def parcel_receiver(message: types.Message, state: FSMContext):
 @dp.message(StateFilter(ParcelStates.receiver_phone))
 async def parcel_receiver_phone(message: types.Message, state: FSMContext):
     await state.update_data(receiver_phone=message.text.strip())
-    await state.set_state(ParcelStates.np_office)
-    await message.answer("Відділення Нової Пошти (місто і номер):")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏠 Доставка на адресу", callback_data="parcel_delivery:address")],
+        [InlineKeyboardButton(text="📦 Відділення Нової Пошти", callback_data="parcel_delivery:np")],
+    ])
+    await state.set_state(ParcelStates.delivery_kind)
+    await message.answer("Як доставити посилку?", reply_markup=kb)
 
 
-@dp.message(StateFilter(ParcelStates.np_office))
-async def parcel_np_office(message: types.Message, state: FSMContext):
-    await state.update_data(np_office=message.text.strip())
+@dp.callback_query(lambda c: c.data and c.data.startswith("parcel_delivery:"))
+async def parcel_delivery_kind(callback: types.CallbackQuery, state: FSMContext):
+    kind = callback.data.split(":", 1)[1]
+    await state.update_data(delivery_kind=kind)
+    await state.set_state(ParcelStates.delivery_target)
+    prompt = ("Адреса доставки (місто, вулиця, будинок):" if kind == "address"
+              else "Відділення Нової Пошти (місто і номер):")
+    await callback.message.answer(prompt)
+    await callback.answer()
+
+
+@dp.message(StateFilter(ParcelStates.delivery_target))
+async def parcel_delivery_target(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    target = message.text.strip()
+    if data.get("delivery_kind") == "address":
+        await state.update_data(receiver_address=target)
+    else:
+        await state.update_data(np_office=target)
     await state.set_state(ParcelStates.description)
-    await message.answer("Опис посилки (або '-' щоб пропустити):")
+    await message.answer("Опис посилки — що всередині (або '-' щоб пропустити):")
 
 
 @dp.message(StateFilter(ParcelStates.description))
 async def parcel_description(message: types.Message, state: FSMContext):
     desc = message.text.strip()
-    if desc == '-':
-        desc = None
+    await state.update_data(description=None if desc == '-' else desc)
+    await state.set_state(ParcelStates.photo)
+    await message.answer(
+        "Надішліть фото посилки — воно збережеться в системі як підтвердження.\n"
+        "Якщо фото немає, напишіть '-'."
+    )
 
+
+async def _register_parcel(message: types.Message, state: FSMContext, photo_bytes: bytes = None):
     data = await state.get_data()
     payload = {
-        "direction":      data["direction"],
-        "sender":         data["sender"],
-        "sender_phone":   data["sender_phone"],
-        "receiver":       data["receiver"],
-        "receiver_phone": data["receiver_phone"],
-        "np_office":      data["np_office"],
-        "description":    desc,
+        "direction":          data["direction"],
+        "sender":             data["sender"],
+        "sender_phone":       data["sender_phone"],
+        "sender_address":     data.get("sender_address"),
+        "receiver":           data["receiver"],
+        "receiver_phone":     data["receiver_phone"],
+        "receiver_address":   data.get("receiver_address"),
+        "np_office":          data.get("np_office"),
+        "description":        data.get("description"),
+        "sender_telegram_id": message.from_user.id,
     }
 
     try:
         parcel = await api_post("/api/parcels", payload)
-        await message.answer(
-            f"Посилку зареєстровано! id={parcel['id']}\n"
-            f"Напрямок: {parcel['direction']}\n"
-            f"Відправник: {parcel['sender']} ({parcel['sender_phone']})\n"
-            f"Отримувач: {parcel['receiver']} ({parcel['receiver_phone']})\n"
-            f"НП офіс: {parcel['np_office']}"
-        )
     except Exception:
         await message.answer("Помилка реєстрації посилки. Спробуйте пізніше.")
+        await state.clear()
+        return
 
+    photo_note = ""
+    if photo_bytes:
+        try:
+            await api_upload(f"/api/parcels/{parcel['id']}/photos", photo_bytes, "parcel.jpg")
+            photo_note = "Фото збережено.\n"
+        except Exception:
+            photo_note = "Фото не вдалося зберегти, менеджер додасть його вручну.\n"
+
+    destination = parcel.get("receiver_address") or parcel.get("np_office") or "—"
+    await message.answer(
+        f"Посилку прийнято!\n\n"
+        f"Трек-номер: {parcel['tracking_number']}\n"
+        f"Напрямок: {parcel['direction']}\n"
+        f"Забрати: {parcel.get('sender_address') or '—'}\n"
+        f"Доставка: {destination}\n"
+        f"Отримувач: {parcel['receiver']} ({parcel['receiver_phone']})\n"
+        f"{photo_note}\n"
+        f"Статус можна перевірити командою /track",
+        reply_markup=public_kb(),
+    )
+    await state.clear()
+
+
+@dp.message(StateFilter(ParcelStates.photo), lambda m: m.photo)
+async def parcel_photo(message: types.Message, state: FSMContext):
+    buffer = await bot.download(message.photo[-1].file_id)
+    await _register_parcel(message, state, buffer.read())
+
+
+@dp.message(StateFilter(ParcelStates.photo))
+async def parcel_no_photo(message: types.Message, state: FSMContext):
+    if (message.text or "").strip() != '-':
+        await message.answer("Надішліть фото посилки або напишіть '-' щоб пропустити.")
+        return
+    await _register_parcel(message, state)
+
+
+# ── /track ────────────────────────────────────────────────────────────────────
+
+@dp.message(Command("track"))
+async def cmd_track(message: types.Message, state: FSMContext):
+    await state.set_state(TrackStates.await_number)
+    await message.answer("Введіть трек-номер посилки (наприклад CT-7K4M2Q):")
+
+
+@dp.message(StateFilter(TrackStates.await_number))
+async def track_lookup(message: types.Message, state: FSMContext):
+    number = (message.text or "").strip().upper()
+    try:
+        parcel = await api_get(f"/api/parcels/track/{number}")
+    except Exception:
+        await message.answer("Посилку з таким номером не знайдено. Перевірте номер.")
+        await state.clear()
+        return
+
+    await message.answer(
+        f"Посилка {parcel['tracking_number']}\n\n"
+        f"Статус: {PARCEL_STATUS_LABELS.get(parcel['status'], parcel['status'])}\n"
+        f"Напрямок: {parcel['direction']}\n"
+        f"Отримувач: {parcel['receiver']}\n"
+        f"Доставка: {parcel.get('receiver_address') or parcel.get('np_office') or '—'}"
+    )
     await state.clear()
 
 
@@ -675,6 +806,7 @@ async def set_commands():
         BotCommand(command="rides",          description="Переглянути рейси"),
         BotCommand(command="book",           description="Забронювати місце"),
         BotCommand(command="parcel",         description="Відправити посилку"),
+        BotCommand(command="track",          description="Статус посилки"),
         BotCommand(command="my_bookings",    description="Мої бронювання"),
         BotCommand(command="cancel_booking", description="Скасувати бронювання"),
         BotCommand(command="change_booking", description="Змінити бронювання"),

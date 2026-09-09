@@ -100,6 +100,58 @@ def generate_day_before_reminders(db: Session, target: Optional[date] = None) ->
     return queued
 
 
+PARCEL_STATUS_TEXT = {
+    "accepted":         "Посилку прийнято.",
+    "in_transit":       "Посилка в дорозі.",
+    "border_crossed":   "Посилка перетнула кордон.",
+    "out_for_delivery": "Посилка сьогодні на доставці.",
+    "delivered":        "Посилку доставлено.",
+}
+
+PARCEL_STATUSES = list(PARCEL_STATUS_TEXT)
+
+
+def parcel_status_text(parcel: models.Parcel, for_receiver: bool) -> str:
+    text = f"Посилка {parcel.tracking_number}\n\n{PARCEL_STATUS_TEXT[parcel.status]}\n"
+    if for_receiver:
+        text += f"Відправник: {parcel.sender}\n"
+        destination = parcel.receiver_address or parcel.np_office
+        if destination and parcel.status in ("out_for_delivery", "delivered"):
+            text += f"Адреса: {destination}\n"
+    else:
+        text += f"Отримувач: {parcel.receiver}\n"
+    return text.rstrip()
+
+
+def notify_parcel_status(db: Session, parcel: models.Parcel) -> int:
+    """Tell both sides about a status change; whoever we can reach on Telegram."""
+    recipients = []
+    if parcel.sender_telegram_id:
+        recipients.append((parcel.sender_telegram_id, False))
+    else:
+        sender_contact = (
+            db.query(models.TelegramContact)
+            .filter(models.TelegramContact.phone == normalize_phone(parcel.sender_phone))
+            .first()
+        )
+        if sender_contact:
+            recipients.append((sender_contact.telegram_id, False))
+
+    receiver_contact = (
+        db.query(models.TelegramContact)
+        .filter(models.TelegramContact.phone == normalize_phone(parcel.receiver_phone))
+        .first()
+    )
+    if receiver_contact:
+        recipients.append((receiver_contact.telegram_id, True))
+
+    for telegram_id, for_receiver in recipients:
+        enqueue(db, telegram_id, parcel_status_text(parcel, for_receiver), "parcel_status")
+
+    db.commit()
+    return len(recipients)
+
+
 def notify_ride_departed(db: Session, ride: models.Ride) -> int:
     queued = 0
     for booking in ride.bookings:

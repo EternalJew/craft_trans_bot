@@ -5,6 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
@@ -14,6 +15,7 @@ from database import engine, get_db, SessionLocal
 import models
 import schemas
 import notify
+import storage
 from auth import authenticate_user, create_access_token
 from routers import routes, rides, bookings, parcels, users, driver, vehicles, notifications
 
@@ -58,6 +60,9 @@ app.include_router(users.router)
 app.include_router(driver.router)
 app.include_router(vehicles.router)
 app.include_router(notifications.router)
+
+os.makedirs(storage.PARCEL_PHOTO_DIR, exist_ok=True)
+app.mount("/media", StaticFiles(directory=storage.MEDIA_ROOT), name="media")
 
 
 @app.post("/auth/token", response_model=schemas.Token)

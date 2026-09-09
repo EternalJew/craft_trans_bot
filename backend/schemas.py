@@ -132,25 +132,46 @@ class BookingOut(BookingBase):
 # ── Parcel ────────────────────────────────────────────────────────────────────
 
 class ParcelBase(BaseModel):
-    direction:      str
-    sender:         str
-    sender_phone:   str
-    receiver:       str
-    receiver_phone: str
-    np_office:      str
-    description:    Optional[str] = None
-    ride_id:        Optional[int] = None
+    direction:        str
+    sender:           str
+    sender_phone:     str
+    sender_address:   Optional[str] = None
+    receiver:         str
+    receiver_phone:   str
+    receiver_address: Optional[str] = None
+    np_office:        Optional[str] = None
+    description:      Optional[str] = None
+    price:            Optional[int] = None
+    ride_id:          Optional[int] = None
 
 class ParcelCreate(ParcelBase):
-    pass
+    sender_telegram_id: Optional[int] = None
+
+class ParcelUpdate(BaseModel):
+    ride_id:          Optional[int] = None
+    sender_address:   Optional[str] = None
+    receiver_address: Optional[str] = None
+    np_office:        Optional[str] = None
+    description:      Optional[str] = None
+    price:            Optional[int] = None
 
 class ParcelStatusUpdate(BaseModel):
     status: str
 
+class ParcelPhotoOut(BaseModel):
+    id:        int
+    parcel_id: int
+    filename:  str
+    kind:      str
+    model_config = {"from_attributes": True}
+
 class ParcelOut(ParcelBase):
-    id:         int
-    status:     str
-    created_at: datetime
+    id:              int
+    tracking_number: str
+    status:          str
+    created_at:      datetime
+    delivered_at:    Optional[datetime] = None
+    photos:          List[ParcelPhotoOut] = []
     model_config = {"from_attributes": True}
 
 
