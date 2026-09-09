@@ -108,8 +108,8 @@ class BookingBase(BaseModel):
     name:         str
     phone:        str
     seats:        int
-    from_stop_id: Optional[int] = None
-    to_stop_id:   Optional[int] = None
+    from_city:    str
+    to_city:      str
     from_address: Optional[str] = None
     to_address:   Optional[str] = None
     comment:      Optional[str] = None
@@ -137,8 +137,6 @@ class BookingOut(BookingBase):
     created_at:  datetime
     status:      str
     source:      str
-    from_stop:   Optional[StopOut] = None
-    to_stop:     Optional[StopOut] = None
     model_config = {"from_attributes": True}
 
 

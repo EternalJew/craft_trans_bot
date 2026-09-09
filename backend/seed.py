@@ -35,19 +35,18 @@ if not existing:
 else:
     print(f"Admin '{admin_username}' already exists")
 
-# ── Create the two real route pairs ───────────────────────────────────────────
-# Bus A: Сарни / Рівне / Львів ↔ Hradec Králové / Mladá Boleslav / Liberec
-# Bus B: Остріг / Рівне / Луцьк ↔ Brno / Praha / Chomutov
-UA_A = ["Сарни", "Рівне", "Львів"]
-CZ_A = ["Hradec Králové", "Mladá Boleslav", "Liberec"]
-UA_B = ["Остріг", "Рівне", "Луцьк"]
-CZ_B = ["Brno", "Praha", "Chomutov"]
+# ── Create the two directions ─────────────────────────────────────────────────
+# Which van serves which town is decided per departure, so a ride is just a
+# direction and a date. These city lists are the suggestions a passenger picks
+# from — they can also type a town of their own.
+UA_CITIES = ["Рівне", "Луцьк", "Львів", "Сарни", "Костопіль",
+             "Остріг", "Славута", "Броди", "Буськ"]
+CZ_CITIES = ["Карлові Вари", "Пілзень", "Хомутов", "Мост", "Лоуни", "Кадань",
+             "Прага", "Градець Кралове", "Брно", "Оломоуц", "Острава"]
 
 ROUTES = [
-    ("Захід UA → Чехія (північ)",  "UA->CZ", UA_A, CZ_A),
-    ("Чехія (північ) → Захід UA",  "CZ->UA", CZ_A, UA_A),
-    ("Захід UA → Чехія (Прага)",   "UA->CZ", UA_B, CZ_B),
-    ("Чехія (Прага) → Захід UA",   "CZ->UA", CZ_B, UA_B),
+    ("Україна → Чехія", "UA->CZ", UA_CITIES, CZ_CITIES),
+    ("Чехія → Україна", "CZ->UA", CZ_CITIES, UA_CITIES),
 ]
 
 existing_route = db.query(models.Route).first()
@@ -85,7 +84,6 @@ if not existing_route:
                 departure_time=dt_time(6, 0),
                 seats_total=8,
                 seats_free=8,
-                price=2000,
                 status="active",
             ))
     db.commit()

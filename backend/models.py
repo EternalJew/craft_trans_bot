@@ -71,8 +71,9 @@ class Booking(Base):
     name         = Column(String, nullable=False)
     phone        = Column(String, nullable=False)
     seats        = Column(Integer, nullable=False)
-    from_stop_id = Column(Integer, ForeignKey("stops.id"), nullable=True)
-    to_stop_id   = Column(Integer, ForeignKey("stops.id"), nullable=True)
+    # Free text: one of the route's stops, or a town the passenger typed themselves.
+    from_city    = Column(String, nullable=False)
+    to_city      = Column(String, nullable=False)
     from_address = Column(String, nullable=True)   # door-to-door pickup address
     to_address   = Column(String, nullable=True)   # door-to-door dropoff address
     pickup_time  = Column(Time, nullable=True)     # ETA at the pickup address
@@ -89,8 +90,6 @@ class Booking(Base):
     reminded_departure  = Column(Boolean, default=False)
 
     ride      = relationship("Ride", back_populates="bookings")
-    from_stop = relationship("Stop", foreign_keys=[from_stop_id])
-    to_stop   = relationship("Stop", foreign_keys=[to_stop_id])
 
 
 class Parcel(Base):

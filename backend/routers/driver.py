@@ -60,7 +60,6 @@ async def me(user: models.User = Depends(current_driver), db: Session = Depends(
 
 
 def _booking_point(booking: models.Booking, kind: str) -> dict:
-    stop = booking.from_stop if kind == "pickup" else booking.to_stop
     address = booking.from_address if kind == "pickup" else booking.to_address
     return {
         "kind":     kind,
@@ -68,7 +67,7 @@ def _booking_point(booking: models.Booking, kind: str) -> dict:
         "id":       booking.id,
         "title":    booking.name,
         "phone":    booking.phone,
-        "city":     stop.city if stop else None,
+        "city":     booking.from_city if kind == "pickup" else booking.to_city,
         "address":  address,
         "detail":   f"{booking.seats} місць" + (f" · {booking.comment}" if booking.comment else ""),
         "status":   booking.pickup_status,
@@ -102,19 +101,16 @@ async def manifest(
 ):
     """Everything the driver does today, in the order they drive it."""
     ride = _owned_ride(db, ride_id, user)
-    stop_order = {stop.id: stop.order for stop in ride.route.stops}
+    # Towns the passenger typed themselves are not on the route, so they sort
+    # after the known stops and the driver slots them in.
+    stop_order = {stop.city: stop.order for stop in ride.route.stops}
+    last = len(stop_order)
 
     bookings = [b for b in ride.bookings if b.status == "confirmed"]
     parcels = db.query(models.Parcel).filter(models.Parcel.ride_id == ride_id).all()
 
-    pickups = sorted(
-        (b for b in bookings if b.from_stop_id),
-        key=lambda b: stop_order.get(b.from_stop_id, 0),
-    )
-    dropoffs = sorted(
-        (b for b in bookings if b.to_stop_id),
-        key=lambda b: stop_order.get(b.to_stop_id, 0),
-    )
+    pickups = sorted(bookings, key=lambda b: stop_order.get(b.from_city, last))
+    dropoffs = sorted(bookings, key=lambda b: stop_order.get(b.to_city, last))
 
     points = (
         [_booking_point(b, "pickup") for b in pickups]

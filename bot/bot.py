@@ -1,5 +1,6 @@
 import os
 import asyncio
+from datetime import date
 import httpx
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -71,6 +72,16 @@ async def api_upload(path: str, content: bytes, filename: str):
         return r.json()
 
 
+WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"]
+MONTHS = ["січня", "лютого", "березня", "квітня", "травня", "червня",
+          "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
+
+
+def fmt_date(iso: str) -> str:
+    d = date.fromisoformat(iso)
+    return f"{WEEKDAYS[d.weekday()]}, {d.day} {MONTHS[d.month - 1]}"
+
+
 PARCEL_STATUS_LABELS = {
     "accepted":         "прийнято",
     "in_transit":       "в дорозі",
@@ -85,8 +96,10 @@ PARCEL_STATUS_LABELS = {
 class BookingStates(StatesGroup):
     choosing_ride  = State()
     choosing_from  = State()
+    typing_from    = State()
     from_address   = State()
     choosing_to    = State()
+    typing_to      = State()
     to_address     = State()
     phone          = State()
     name           = State()
@@ -195,10 +208,9 @@ async def cmd_rides(message: types.Message):
     lines = []
     for r in active:
         route_name = r.get("route", {}).get("name", "?")
-        price = f"{r['price']} грн" if r.get("price") else "—"
         lines.append(
-            f"🚐 {r['date']} | {route_name}\n"
-            f"   Місць вільно: {r['seats_free']}/{r['seats_total']} | Ціна: {price}"
+            f"🚐 {fmt_date(r['date'])} · {route_name}\n"
+            f"   Місць вільно: {r['seats_free']}/{r['seats_total']}"
         )
     await message.answer("\n\n".join(lines))
 
@@ -220,7 +232,7 @@ async def cmd_book(message: types.Message, state: FSMContext):
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"{r['date']} {r['route']['name']} ({r['seats_free']} вільно)",
+            text=f"{fmt_date(r['date'])} · {r['route']['name']}",
             callback_data=f"book_ride:{r['id']}"
         )]
         for r in active
@@ -244,55 +256,71 @@ async def book_select_ride(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    pickup_stops = [s for s in stops if s.get("pickup")]
-    if not pickup_stops:
-        await state.update_data(from_stop_id=None, from_stop_city="?")
-        await state.set_state(BookingStates.choosing_to)
-        await callback.message.answer("Куди їдете? Введіть місто:")
-        await callback.answer()
-        return
-
     await state.update_data(all_stops=stops)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"📍 {s['city']} ({s['country']})", callback_data=f"from_stop:{s['id']}:{s['city']}")]
-        for s in pickup_stops
-    ])
     await state.set_state(BookingStates.choosing_from)
-    await callback.message.answer("Звідки виїжджаєте?", reply_markup=kb)
-    await callback.answer()
-
-
-@dp.callback_query(lambda c: c.data and c.data.startswith("from_stop:"))
-async def book_from_stop(callback: types.CallbackQuery, state: FSMContext):
-    _, stop_id, city = callback.data.split(":", 2)
-    await state.update_data(from_stop_id=int(stop_id), from_stop_city=city)
-    await state.set_state(BookingStates.from_address)
     await callback.message.answer(
-        f"Вкажіть адресу подачі в місті {city} (вулиця, будинок).\n"
-        "Якщо зручніше сісти на загальній зупинці — напишіть '-'."
+        "Звідки вас забрати?",
+        reply_markup=_city_kb([s["city"] for s in stops if s.get("pickup")], "from"),
     )
     await callback.answer()
 
 
+def _city_kb(cities: list, side: str) -> InlineKeyboardMarkup:
+    """Suggested cities, two per row, plus a way to name a town that is not listed."""
+    rows = [
+        [InlineKeyboardButton(text=c, callback_data=f"{side}_city:{c}") for c in cities[i:i + 2]]
+        for i in range(0, len(cities), 2)
+    ]
+    rows.append([InlineKeyboardButton(text="✏️ Інше місто або село", callback_data=f"{side}_city_other")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _ask_from_address(message: types.Message, state: FSMContext, city: str):
+    await state.set_state(BookingStates.from_address)
+    await message.answer(
+        f"Вкажіть адресу подачі — {city}, вулиця й будинок.\n"
+        "Якщо зручніше сісти на загальній зупинці — напишіть '-'."
+    )
+
+
+async def _ask_to_address(message: types.Message, state: FSMContext, city: str):
+    await state.set_state(BookingStates.to_address)
+    await message.answer(
+        f"Вкажіть адресу висадки — {city}, вулиця й будинок.\n"
+        "Якщо висадка на загальній зупинці — напишіть '-'."
+    )
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("from_city:"))
+async def book_from_city(callback: types.CallbackQuery, state: FSMContext):
+    city = callback.data.split(":", 1)[1]
+    await state.update_data(from_city=city)
+    await _ask_from_address(callback.message, state, city)
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "from_city_other")
+async def book_from_city_other(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(BookingStates.typing_from)
+    await callback.message.answer("Напишіть назву вашого міста або села:")
+    await callback.answer()
+
+
+@dp.message(StateFilter(BookingStates.typing_from))
+async def book_from_city_typed(message: types.Message, state: FSMContext):
+    city = message.text.strip()
+    await state.update_data(from_city=city)
+    await _ask_from_address(message, state, city)
+
+
 async def _ask_dropoff(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    all_stops = data.get("all_stops", [])
-    from_id = data.get("from_stop_id")
-    from_order = next((s["order"] for s in all_stops if s["id"] == from_id), 0)
-    dropoff_stops = [s for s in all_stops if s.get("dropoff") and s["order"] > from_order]
-
-    if not dropoff_stops:
-        await state.update_data(to_stop_id=None, to_stop_city="?")
-        await state.set_state(BookingStates.phone)
-        await message.answer("Ваш номер телефону:", reply_markup=phone_kb())
-        return
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"📍 {s['city']} ({s['country']})", callback_data=f"to_stop:{s['id']}:{s['city']}")]
-        for s in dropoff_stops
-    ])
+    stops = data.get("all_stops", [])
     await state.set_state(BookingStates.choosing_to)
-    await message.answer("Куди їдете?", reply_markup=kb)
+    await message.answer(
+        "Куди вас довезти?",
+        reply_markup=_city_kb([s["city"] for s in stops if s.get("dropoff")], "to"),
+    )
 
 
 @dp.message(StateFilter(BookingStates.from_address))
@@ -302,16 +330,26 @@ async def book_from_address(message: types.Message, state: FSMContext):
     await _ask_dropoff(message, state)
 
 
-@dp.callback_query(lambda c: c.data and c.data.startswith("to_stop:"))
-async def book_to_stop(callback: types.CallbackQuery, state: FSMContext):
-    _, stop_id, city = callback.data.split(":", 2)
-    await state.update_data(to_stop_id=int(stop_id), to_stop_city=city)
-    await state.set_state(BookingStates.to_address)
-    await callback.message.answer(
-        f"Вкажіть адресу висадки в місті {city} (вулиця, будинок).\n"
-        "Якщо висадка на загальній зупинці — напишіть '-'."
-    )
+@dp.callback_query(lambda c: c.data and c.data.startswith("to_city:"))
+async def book_to_city(callback: types.CallbackQuery, state: FSMContext):
+    city = callback.data.split(":", 1)[1]
+    await state.update_data(to_city=city)
+    await _ask_to_address(callback.message, state, city)
     await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "to_city_other")
+async def book_to_city_other(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(BookingStates.typing_to)
+    await callback.message.answer("Напишіть назву міста або села, куди їдете:")
+    await callback.answer()
+
+
+@dp.message(StateFilter(BookingStates.typing_to))
+async def book_to_city_typed(message: types.Message, state: FSMContext):
+    city = message.text.strip()
+    await state.update_data(to_city=city)
+    await _ask_to_address(message, state, city)
 
 
 @dp.message(StateFilter(BookingStates.to_address))
@@ -373,8 +411,8 @@ async def booking_comment(message: types.Message, state: FSMContext):
         "name":         data["name"],
         "phone":        data["phone"],
         "seats":        data["seats"],
-        "from_stop_id": data.get("from_stop_id"),
-        "to_stop_id":   data.get("to_stop_id"),
+        "from_city":    data["from_city"],
+        "to_city":      data["to_city"],
         "from_address": data.get("from_address"),
         "to_address":   data.get("to_address"),
         "comment":      comment,
@@ -390,12 +428,10 @@ async def booking_comment(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    from_city = data.get("from_stop_city", "?")
-    to_city   = data.get("to_stop_city",   "?")
     text = (
         f"Бронювання підтверджено! id={booking['id']}\n"
         f"ПІБ: {data['name']}\nТелефон: {data['phone']}\n"
-        f"Маршрут: {from_city} → {to_city}\n"
+        f"Маршрут: {data['from_city']} → {data['to_city']}\n"
     )
     if data.get("from_address"):
         text += f"Подача: {data['from_address']}\n"
@@ -433,14 +469,10 @@ async def my_bookings_list(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    lines = []
-    for b in bookings:
-        from_c = b.get("from_stop", {}) or {}
-        to_c   = b.get("to_stop",   {}) or {}
-        lines.append(
-            f"id={b['id']} | {from_c.get('city', '?')} → {to_c.get('city', '?')} | "
-            f"{b['seats']} місць | {b['status']}"
-        )
+    lines = [
+        f"id={b['id']} | {b['from_city']} → {b['to_city']} | {b['seats']} місць | {b['status']}"
+        for b in bookings
+    ]
     await message.answer("\n".join(lines))
     await state.clear()
 
@@ -471,7 +503,7 @@ async def cancel_find(message: types.Message, state: FSMContext):
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"id={b['id']} | {(b.get('from_stop') or {}).get('city', '?')} → {(b.get('to_stop') or {}).get('city', '?')} | {b['seats']} місць",
+            text=f"id={b['id']} | {b['from_city']} → {b['to_city']} | {b['seats']} місць",
             callback_data=f"cancel_sel:{b['id']}"
         )]
         for b in active
@@ -517,7 +549,7 @@ async def change_find(message: types.Message, state: FSMContext):
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"id={b['id']} | {(b.get('from_stop') or {}).get('city','?')} → {(b.get('to_stop') or {}).get('city','?')} | {b['seats']} місць",
+            text=f"id={b['id']} | {b['from_city']} → {b['to_city']} | {b['seats']} місць",
             callback_data=f"change_sel:{b['id']}"
         )]
         for b in active

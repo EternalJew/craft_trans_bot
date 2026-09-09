@@ -141,7 +141,7 @@ export default function BookingsPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600">{b.phone}</td>
                   <td className="px-4 py-3 text-gray-600">
-                    <div>{b.from_stop?.city || '—'} → {b.to_stop?.city || '—'}</div>
+                    <div>{b.from_city} → {b.to_city}</div>
                     {(b.from_address || b.to_address) && (
                       <div className="text-xs text-gray-400">
                         {b.from_address || '—'} → {b.to_address || '—'}

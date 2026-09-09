@@ -50,13 +50,10 @@ def _driver_line(ride: models.Ride) -> str:
 def day_before_text(booking: models.Booking, ride: models.Ride) -> str:
     time_str = _fmt_time(booking.pickup_time) or _fmt_time(ride.departure_time)
     when = f" о {time_str}" if time_str else ""
-    from_city = booking.from_stop.city if booking.from_stop else "—"
-    to_city = booking.to_stop.city if booking.to_stop else "—"
-
     text = (
         f"Нагадування про поїздку\n\n"
         f"Завтра, {ride.date.strftime('%d.%m')}{when}\n"
-        f"Маршрут: {from_city} → {to_city}\n"
+        f"Маршрут: {booking.from_city} → {booking.to_city}\n"
     )
     if booking.from_address:
         text += f"Подача: {booking.from_address}\n"

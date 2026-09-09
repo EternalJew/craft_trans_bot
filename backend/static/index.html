@@ -320,8 +320,10 @@
         </div>
         <p class="muted small">Виїзд зранку, прибуття наступного дня.</p>
         <ul class="cities">
-          <li>Сарни</li><li>Рівне</li><li>Остріг</li><li>Луцьк</li><li>Львів</li>
+          <li>Рівне</li><li>Луцьк</li><li>Львів</li><li>Сарни</li><li>Костопіль</li>
+          <li>Остріг</li><li>Славута</li><li>Броди</li><li>Буськ</li>
         </ul>
+        <p class="muted small" style="margin-top:10px">Забираємо й з менших містечок і сіл поблизу — питайте.</p>
       </div>
 
       <div class="card reveal">
@@ -334,9 +336,11 @@
         </div>
         <p class="muted small">Забираємо за адресою у будь-якому з міст.</p>
         <ul class="cities">
-          <li>Praha</li><li>Brno</li><li>Liberec</li><li>Hradec Králové</li>
-          <li>Mladá Boleslav</li><li>Chomutov</li>
+          <li>Прага</li><li>Брно</li><li>Острава</li><li>Оломоуц</li><li>Пілзень</li>
+          <li>Карлові Вари</li><li>Хомутов</li><li>Мост</li><li>Лоуни</li>
+          <li>Кадань</li><li>Градець Кралове</li>
         </ul>
+        <p class="muted small" style="margin-top:10px">Забираємо й з менших містечок поблизу — питайте.</p>
       </div>
     </div>
 
@@ -424,13 +428,20 @@
 
           <div class="field-row">
             <div>
-              <label for="from-stop">Звідки забрати</label>
-              <select id="from-stop" required></select>
+              <label for="from-city">Звідки забрати</label>
+              <input id="from-city" list="from-cities" required autocomplete="off"
+                     placeholder="Місто або село">
+              <datalist id="from-cities"></datalist>
             </div>
             <div>
-              <label for="to-stop">Куди довезти</label>
-              <select id="to-stop" required></select>
+              <label for="to-city">Куди довезти</label>
+              <input id="to-city" list="to-cities" required autocomplete="off"
+                     placeholder="Місто або село">
+              <datalist id="to-cities"></datalist>
             </div>
+          </div>
+          <div class="hint" style="margin-top:-6px">
+            Вашого населеного пункту нема у списку? Впишіть його — заберемо, якщо це по дорозі.
           </div>
 
           <div class="field-row">
@@ -553,15 +564,16 @@ async function loadRides() {
   }
 
   for (const ride of rides) {
-    const price = ride.price ? ` · ${ride.price} грн` : '';
-    select.append(option(ride.id, `${fmtDate(ride.date)} · ${ride.route.name} · ${ride.seats_free} місць${price}`));
+    select.append(option(ride.id, `${fmtDate(ride.date)} · ${ride.route.name}`));
   }
   $('ride-hint').textContent = 'Не знайшли зручну дату? Зателефонуйте — можливо, додамо виїзд.';
-  select.onchange = () => loadStops(Number(select.value));
-  await loadStops(rides[0].id);
+  select.onchange = () => loadCities(Number(select.value));
+  await loadCities(rides[0].id);
 }
 
-async function loadStops(rideId) {
+// The stop lists are suggestions only — the fields stay free text, so a
+// passenger from a village that is not on the list can write it in.
+async function loadCities(rideId) {
   const ride = state.rides.find((r) => r.id === rideId);
   if (!ride) return;
   if (!state.routes[ride.route_id]) {
@@ -569,9 +581,10 @@ async function loadStops(rideId) {
   }
   const stops = state.routes[ride.route_id].stops;
 
-  const from = $('from-stop'), to = $('to-stop');
-  from.replaceChildren(...stops.filter((s) => s.pickup).map((s) => option(s.id, `${s.city} (${s.country})`)));
-  to.replaceChildren(...stops.filter((s) => s.dropoff).map((s) => option(s.id, `${s.city} (${s.country})`)));
+  const fill = (listId, cities) => $(listId).replaceChildren(
+    ...cities.map((city) => { const o = document.createElement('option'); o.value = city; return o; }));
+  fill('from-cities', stops.filter((s) => s.pickup).map((s) => s.city));
+  fill('to-cities', stops.filter((s) => s.dropoff).map((s) => s.city));
 }
 
 $('booking-form').onsubmit = async (event) => {
@@ -587,8 +600,8 @@ $('booking-form').onsubmit = async (event) => {
     name: $('name').value.trim(),
     phone: $('phone').value.trim(),
     seats: Number($('seats').value),
-    from_stop_id: Number($('from-stop').value),
-    to_stop_id: Number($('to-stop').value),
+    from_city: $('from-city').value.trim(),
+    to_city: $('to-city').value.trim(),
     from_address: $('from-address').value.trim() || null,
     to_address: $('to-address').value.trim() || null,
     comment: $('comment').value.trim() || null,
