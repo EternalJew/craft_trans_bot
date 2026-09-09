@@ -6,18 +6,25 @@ from datetime import date, datetime, time
 # ── User ──────────────────────────────────────────────────────────────────────
 
 class UserCreate(BaseModel):
-    username:  str
-    password:  str
-    full_name: Optional[str] = None
-    phone:     Optional[str] = None
-    role:      str = "driver"
+    username:    str
+    password:    str
+    full_name:   Optional[str] = None
+    phone:       Optional[str] = None
+    role:        str = "driver"
+    telegram_id: Optional[int] = None
+
+class UserUpdate(BaseModel):
+    full_name:   Optional[str] = None
+    phone:       Optional[str] = None
+    telegram_id: Optional[int] = None
 
 class UserOut(BaseModel):
-    id:        int
-    username:  str
-    full_name: Optional[str] = None
-    phone:     Optional[str] = None
-    role:      str
+    id:          int
+    username:    str
+    full_name:   Optional[str] = None
+    phone:       Optional[str] = None
+    role:        str
+    telegram_id: Optional[int] = None
     model_config = {"from_attributes": True}
 
 class UserMe(UserOut):
@@ -118,8 +125,14 @@ class BookingUpdate(BaseModel):
     to_address:   Optional[str] = None
     pickup_time:  Optional[time] = None
 
+class DriverBookingUpdate(BaseModel):
+    pickup_status:  Optional[str] = None    # waiting | picked_up | no_show | dropped_off
+    cash_collected: Optional[int] = None
+
 class BookingOut(BookingBase):
-    id:          int
+    id:             int
+    pickup_status:  str
+    cash_collected: Optional[int] = None
     pickup_time: Optional[time] = None
     created_at:  datetime
     status:      str
@@ -158,6 +171,10 @@ class ParcelUpdate(BaseModel):
 class ParcelStatusUpdate(BaseModel):
     status: str
 
+class DriverParcelUpdate(BaseModel):
+    status:         Optional[str] = None
+    cash_collected: Optional[int] = None
+
 class ParcelPhotoOut(BaseModel):
     id:        int
     parcel_id: int
@@ -169,6 +186,7 @@ class ParcelOut(ParcelBase):
     id:              int
     tracking_number: str
     status:          str
+    cash_collected:  Optional[int] = None
     created_at:      datetime
     delivered_at:    Optional[datetime] = None
     photos:          List[ParcelPhotoOut] = []

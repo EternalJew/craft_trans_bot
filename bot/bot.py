@@ -20,6 +20,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_BASE       = os.getenv("API_BASE", "http://localhost:8000")
 BOT_API_KEY    = os.getenv("BOT_API_KEY", "bot-secret-key")
 NOTIFY_POLL_SECONDS = int(os.getenv("NOTIFY_POLL_SECONDS", "20"))
+WEBAPP_URL     = os.getenv("WEBAPP_URL", "").rstrip("/")
 
 bot     = Bot(token=TELEGRAM_TOKEN)
 storage = MemoryStorage()
@@ -754,6 +755,20 @@ async def track_lookup(message: types.Message, state: FSMContext):
         f"Доставка: {parcel.get('receiver_address') or parcel.get('np_office') or '—'}"
     )
     await state.clear()
+
+
+# ── /driver ───────────────────────────────────────────────────────────────────
+
+@dp.message(Command("driver"))
+async def cmd_driver(message: types.Message):
+    if not WEBAPP_URL:
+        await message.answer("Водійський застосунок ще не налаштований (WEBAPP_URL).")
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text="🚐 Мій маніфест",
+        web_app=types.WebAppInfo(url=f"{WEBAPP_URL}/driver"),
+    )]])
+    await message.answer("Відкрийте маніфест на сьогодні:", reply_markup=kb)
 
 
 # ── /автопарк ─────────────────────────────────────────────────────────────────

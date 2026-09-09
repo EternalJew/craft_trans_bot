@@ -23,8 +23,26 @@ def create_user(body: schemas.UserCreate, db: Session = Depends(get_db), _=Depen
         full_name=body.full_name,
         phone=body.phone,
         role=body.role,
+        telegram_id=body.telegram_id,
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/{user_id}", response_model=schemas.UserOut)
+def update_user(
+    user_id: int,
+    body: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
     db.commit()
     db.refresh(user)
     return user

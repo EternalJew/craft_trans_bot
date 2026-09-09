@@ -5,6 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
@@ -63,6 +64,14 @@ app.include_router(notifications.router)
 
 os.makedirs(storage.PARCEL_PHOTO_DIR, exist_ok=True)
 app.mount("/media", StaticFiles(directory=storage.MEDIA_ROOT), name="media")
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+
+@app.get("/driver", include_in_schema=False)
+def driver_app():
+    """Telegram Mini App the drivers open from the bot."""
+    return FileResponse(os.path.join(STATIC_DIR, "driver.html"))
 
 
 @app.post("/auth/token", response_model=schemas.Token)

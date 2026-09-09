@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Маніфест водія</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --fg: var(--tg-theme-text-color, #1a1a1a);
+    --muted: var(--tg-theme-hint-color, #8a8a8e);
+    --card: var(--tg-theme-secondary-bg-color, #f2f2f7);
+    --accent: var(--tg-theme-button-color, #2481cc);
+    --accent-fg: var(--tg-theme-button-text-color, #ffffff);
+    --border: color-mix(in srgb, var(--muted) 30%, transparent);
+    --ok: #1f9d55;
+    --warn: #d97706;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 12px 12px 40px;
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--fg);
+  }
+  h1 { font-size: 19px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+  .card {
+    background: var(--card); border-radius: 14px;
+    padding: 14px; margin-bottom: 10px;
+  }
+  .card.done { opacity: .55; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .name { font-weight: 600; }
+  .tag {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+    background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);
+  }
+  .tag.drop { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .tag.done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .detail { color: var(--muted); font-size: 14px; margin-top: 3px; }
+  .links { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  a.chip, button {
+    font: inherit; font-size: 14px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--fg); text-decoration: none;
+    padding: 9px 14px; border-radius: 10px; cursor: pointer;
+    min-height: 42px; display: inline-flex; align-items: center; gap: 6px;
+  }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .5; }
+  .actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .bar {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    padding-bottom: 10px; margin-bottom: 4px;
+  }
+  .cash {
+    display: flex; justify-content: space-between; font-size: 14px;
+    padding: 10px 14px; background: var(--card); border-radius: 12px; margin-bottom: 12px;
+  }
+  input[type=number] {
+    font: inherit; width: 110px; padding: 9px 10px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+  }
+  .msg { padding: 24px 8px; color: var(--muted); text-align: center; }
+  .err { color: #c0392b; }
+  select { font: inherit; padding: 10px; border-radius: 10px; width: 100%;
+           border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+</style>
+</head>
+<body>
+<div id="app"><div class="msg">Завантаження…</div></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready();
+tg?.expand();
+
+const app = document.getElementById('app');
+const INIT_DATA = tg?.initData || '';
+let state = { rides: [], rideId: null, manifest: null };
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'X-Telegram-Init-Data': INIT_DATA, ...(options.headers || {}) },
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Помилка запиту');
+  return res.json();
+}
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const child of children.flat()) {
+    if (child != null) node.append(child.nodeType ? child : document.createTextNode(child));
+  }
+  return node;
+}
+
+function navUrl(point) {
+  const query = [point.address, point.city].filter(Boolean).join(', ');
+  return 'https://maps.google.com/?q=' + encodeURIComponent(query);
+}
+
+const KIND_LABEL = { pickup: 'Забрати', dropoff: 'Висадити', delivery: 'Доставити' };
+const DONE_BOOKING = new Set(['picked_up', 'no_show', 'dropped_off']);
+
+function isDone(point) {
+  return point.entity === 'booking'
+    ? DONE_BOOKING.has(point.status)
+    : (point.kind === 'pickup' ? point.status !== 'accepted' : point.status === 'delivered');
+}
+
+async function act(button, fn) {
+  button.disabled = true;
+  try {
+    await fn();
+    await loadManifest(state.rideId);
+  } catch (e) {
+    tg?.showAlert ? tg.showAlert(e.message) : alert(e.message);
+    button.disabled = false;
+  }
+}
+
+function cashField(point) {
+  const input = el('input', {
+    type: 'number', inputMode: 'numeric', placeholder: 'готівка',
+    value: point.cash_collected ?? '',
+  });
+  const save = el('button', { textContent: 'Зберегти' });
+  save.onclick = () => act(save, () => api(
+    `/api/driver/${point.entity === 'booking' ? 'bookings' : 'parcels'}/${point.id}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cash_collected: input.value === '' ? null : Number(input.value) }),
+    },
+  ));
+  return el('div', { className: 'actions' }, input, save);
+}
+
+function photoButton(point) {
+  const input = el('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+  const button = el('button', { textContent: '📷 Фото' });
+  button.onclick = () => input.click();
+  input.onchange = () => {
+    if (!input.files[0]) return;
+    const form = new FormData();
+    form.append('file', input.files[0]);
+    act(button, () => api(`/api/driver/parcels/${point.id}/photo?kind=delivery`, {
+      method: 'POST', body: form,
+    }));
+  };
+  return el('span', {}, button, input);
+}
+
+function statusButton(label, point, payload, primary = true) {
+  const button = el('button', { textContent: label, className: primary ? 'primary' : 'ghost' });
+  const path = point.entity === 'booking'
+    ? `/api/driver/bookings/${point.id}`
+    : `/api/driver/parcels/${point.id}`;
+  button.onclick = () => act(button, () => api(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
+  return button;
+}
+
+function pointCard(point) {
+  const done = isDone(point);
+  const card = el('div', { className: 'card' + (done ? ' done' : '') });
+
+  card.append(el('div', { className: 'row' },
+    el('span', { className: 'name' }, point.title),
+    el('span', { className: 'tag' + (done ? ' done' : point.kind !== 'pickup' ? ' drop' : '') },
+      done ? '✓ готово' : KIND_LABEL[point.kind]),
+  ));
+
+  if (point.address || point.city) {
+    card.append(el('div', { className: 'detail' }, [point.address, point.city].filter(Boolean).join(', ')));
+  }
+  if (point.detail) card.append(el('div', { className: 'detail' }, point.detail));
+
+  const links = el('div', { className: 'links' });
+  if (point.phone) links.append(el('a', { className: 'chip', href: 'tel:' + point.phone }, '📞 ' + point.phone));
+  if (point.address || point.city) {
+    links.append(el('a', { className: 'chip', href: navUrl(point), target: '_blank', rel: 'noreferrer' }, '🧭 Навігатор'));
+  }
+  card.append(links);
+
+  if (!done) {
+    const actions = el('div', { className: 'actions' });
+    if (point.entity === 'booking' && point.kind === 'pickup') {
+      actions.append(
+        statusButton('Забрав', point, { pickup_status: 'picked_up' }),
+        statusButton('Не вийшов', point, { pickup_status: 'no_show' }, false),
+      );
+    } else if (point.entity === 'booking') {
+      actions.append(statusButton('Висадив', point, { pickup_status: 'dropped_off' }));
+    } else if (point.kind === 'pickup') {
+      actions.append(statusButton('Забрав посилку', point, { status: 'in_transit' }), photoButton(point));
+    } else {
+      actions.append(
+        statusButton('Доставив', point, { status: 'delivered' }),
+        statusButton('Перетнув кордон', point, { status: 'border_crossed' }, false),
+        photoButton(point),
+      );
+    }
+    card.append(actions);
+  }
+
+  card.append(cashField(point));
+  return card;
+}
+
+function render() {
+  const { manifest, rides, rideId } = state;
+  app.replaceChildren();
+
+  const bar = el('div', { className: 'bar' });
+  if (rides.length > 1) {
+    const select = el('select');
+    for (const ride of rides) {
+      select.append(el('option', { value: String(ride.id), selected: ride.id === rideId },
+        `${ride.date} · ${ride.route.name}`));
+    }
+    select.onchange = () => loadManifest(Number(select.value));
+    bar.append(select);
+  }
+  app.append(bar);
+
+  if (!manifest) return;
+
+  const ride = manifest.ride;
+  app.append(el('h1', {}, manifest.route.name));
+  app.append(el('div', { className: 'sub' },
+    `${ride.date}${ride.departure_time ? ' · виїзд ' + ride.departure_time.slice(0, 5) : ''} · ${ride.vehicle || 'бус не вказано'}`));
+
+  const rideActions = el('div', { className: 'actions' });
+  if (ride.status === 'active') {
+    const start = el('button', { className: 'primary', textContent: '🚐 Я виїхав' });
+    start.onclick = () => act(start, async () => {
+      const res = await api(`/api/driver/rides/${ride.id}/start`, { method: 'POST' });
+      tg?.showAlert?.(`Сповіщено пасажирів: ${res.notified}`);
+    });
+    rideActions.append(start);
+  } else if (ride.status === 'in_progress') {
+    const finish = el('button', { textContent: '🏁 Завершити рейс' });
+    finish.onclick = () => act(finish, () => api(`/api/driver/rides/${ride.id}/finish`, { method: 'POST' }));
+    rideActions.append(finish);
+  }
+  app.append(rideActions);
+
+  app.append(el('div', { className: 'cash' },
+    el('span', {}, 'Готівка'),
+    el('span', {}, `${manifest.cash.collected} / ${manifest.cash.expected}`)));
+
+  if (!manifest.points.length) {
+    app.append(el('div', { className: 'msg' }, 'На цей рейс ще немає пасажирів і посилок'));
+    return;
+  }
+  for (const point of manifest.points) app.append(pointCard(point));
+}
+
+async function loadManifest(rideId) {
+  state.rideId = rideId;
+  state.manifest = await api(`/api/driver/rides/${rideId}/manifest`);
+  render();
+}
+
+(async () => {
+  try {
+    const me = await api('/api/driver/me');
+    state.rides = me.rides;
+    if (!me.rides.length) {
+      app.replaceChildren(el('div', { className: 'msg' }, 'На вас поки не призначено жодного рейсу'));
+      return;
+    }
+    await loadManifest(me.rides[0].id);
+  } catch (e) {
+    app.replaceChildren(el('div', { className: 'msg err' }, e.message));
+  }
+})();
+</script>
+</body>
+</html>

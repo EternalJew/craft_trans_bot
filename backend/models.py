@@ -13,6 +13,7 @@ class User(Base):
     full_name     = Column(String, nullable=True)
     phone         = Column(String, nullable=True)
     role          = Column(String, default="driver")  # "admin" | "driver"
+    telegram_id   = Column(Integer, unique=True, nullable=True, index=True)
 
     assigned_rides = relationship("Ride", back_populates="driver", foreign_keys="Ride.driver_id")
 
@@ -78,6 +79,9 @@ class Booking(Base):
     comment      = Column(String, nullable=True)
     telegram_id  = Column(Integer, nullable=True, index=True)
     source       = Column(String, default="bot")   # "bot" | "web" | "admin"
+    # set by the driver on the road: waiting | picked_up | no_show | dropped_off
+    pickup_status = Column(String, default="waiting")
+    cash_collected = Column(Integer, nullable=True)
     created_at   = Column(DateTime, default=datetime.utcnow)
     status       = Column(String, default="confirmed")
 
@@ -106,6 +110,7 @@ class Parcel(Base):
     price           = Column(Integer, nullable=True)
     # accepted | in_transit | border_crossed | out_for_delivery | delivered
     status          = Column(String, default="accepted")
+    cash_collected  = Column(Integer, nullable=True)
     sender_telegram_id = Column(Integer, nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow)
     delivered_at    = Column(DateTime, nullable=True)
