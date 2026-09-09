@@ -5,6 +5,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./media:/media
+      - ./backend/static:/app/static   # edit the landing / driver app without rebuilding
     environment:
       DATABASE_URL: sqlite:////app/data/data.db
       MEDIA_ROOT: /media

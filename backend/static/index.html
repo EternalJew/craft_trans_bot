@@ -13,8 +13,10 @@
     --sand: #f5f3ee;
     --line: #e2e0da;
     --brand: #123a6d;
+    --brand-deep: #0e3160;
     --accent: #d98218;
     --ok: #1f7a4d;
+    --glass: rgba(255,255,255,.10);
     --radius: 14px;
     --wrap: 1080px;
   }
@@ -32,21 +34,56 @@
   p { margin: 0 0 14px; }
   section { padding: 66px 0; border-top: 1px solid var(--line); }
   .lead { font-size: 19px; color: var(--ink-soft); max-width: 60ch; }
+  svg { display: block; }
 
-  header { background: var(--brand); color: #fff; }
-  header .wrap { padding-top: 20px; padding-bottom: 74px; }
+  /* ── motion ───────────────────────────────────────────────────────────── */
+  @keyframes wheel    { to { transform: rotate(360deg); } }
+  @keyframes bob      { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+  @keyframes dashrun  { to { stroke-dashoffset: -320; } }
+  @keyframes drift    { from { transform: translateX(40px); } to { transform: translateX(-220px); } }
+  @keyframes rise     { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  @keyframes crossing { 0% { transform: translateX(0); } 100% { transform: translateX(var(--run, 800px)); } }
+  @keyframes litstep  { 0%, 12% { fill: var(--line); } 22%, 100% { fill: var(--accent); } }
+
+  .wheel { transform-box: fill-box; transform-origin: center; animation: wheel 1.1s linear infinite; }
+  .van-bob { animation: bob 2.4s ease-in-out infinite; }
+  .road-dash { animation: dashrun 3.2s linear infinite; }
+  .cloud { animation: drift 26s linear infinite; }
+  .cloud.slow { animation-duration: 40s; }
+  .crossing { animation: crossing 9s ease-in-out infinite alternate; }
+
+  .reveal { opacity: 0; }
+  .reveal.in { animation: rise .7s cubic-bezier(.2,.7,.3,1) both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .wheel, .van-bob, .road-dash, .cloud, .crossing, .step-dot { animation: none !important; }
+    .reveal, .reveal.in { opacity: 1; animation: none !important; }
+  }
+
+  /* ── header / hero ────────────────────────────────────────────────────── */
+  header { background: var(--brand); color: #fff; position: relative; overflow: hidden; }
+  header .wrap { padding-top: 20px; padding-bottom: 40px; position: relative; }
+  .header-glow { position: absolute; inset: 0 0 auto 0; width: 100%; height: 260px; opacity: .5; }
   .topbar { display: flex; justify-content: space-between; align-items: center;
             gap: 16px; flex-wrap: wrap; padding-bottom: 54px; }
-  .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
   .topbar nav { display: flex; gap: 20px; flex-wrap: wrap; }
   .topbar a { color: rgba(255,255,255,.85); text-decoration: none; font-size: 15px; }
   .topbar a:hover { color: #fff; }
-  header h1 { max-width: 16ch; }
-  header .lead { color: rgba(255,255,255,.82); }
+  .hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; align-items: center; }
+  .hero h1 { max-width: 16ch; }
+  .hero .lead { color: rgba(255,255,255,.82); max-width: 44ch; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px; background: var(--glass);
+    border: 1px solid rgba(255,255,255,.22); border-radius: 999px;
+    padding: 6px 14px; font-size: 14px; margin-bottom: 20px;
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #7bd6a4; }
   .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
 
   .btn {
-    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
     font: inherit; font-size: 16px; font-weight: 600; text-decoration: none;
     padding: 13px 24px; border-radius: 10px; border: 1px solid transparent;
     background: var(--accent); color: #fff; transition: filter .15s;
@@ -61,8 +98,12 @@
   .cols-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 
   .card { background: var(--sand); border-radius: var(--radius); padding: 24px; }
+  .card.plain { background: var(--paper); }
   .card h3 { margin-bottom: 8px; }
   .card p:last-child { margin-bottom: 0; }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .card-van { width: 96px; height: 44px; flex-shrink: 0; }
+  .card-van.back { transform: scaleX(-1); }
   .muted { color: var(--ink-soft); }
   .small { font-size: 15px; }
 
@@ -73,7 +114,29 @@
   .when { display: inline-block; background: var(--brand); color: #fff;
           border-radius: 8px; padding: 4px 11px; font-size: 14px; font-weight: 600; }
 
-  form { display: grid; gap: 16px; max-width: 620px; }
+  .corridor { background: var(--sand); border-radius: var(--radius); padding: 22px 26px; margin: 30px 0 26px; }
+  .corridor-line { position: relative; height: 56px; }
+  .corridor-track {
+    position: absolute; left: 0; right: 0; top: 34px; height: 3px;
+    background: repeating-linear-gradient(to right, #cfc9bd 0 9px, transparent 9px 18px);
+  }
+  .corridor-van { position: absolute; top: 8px; left: 0; width: 62px; height: 28px; }
+  .corridor-ends { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; }
+  .corridor-note { text-align: center; font-size: 14px; color: var(--ink-soft); margin-top: 4px; }
+
+  #parcels { background: var(--sand); }
+  .track-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 22px; }
+  .track-step { text-align: center; font-size: 14px; color: var(--ink-soft); }
+  .track-step .step-dot {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--line);
+    margin: 0 auto 10px; animation: litstep 9s linear infinite;
+  }
+  .track-rail { position: relative; height: 3px; background: var(--line); margin: 26px 0 0; border-radius: 2px; }
+  .track-parcel { position: absolute; top: -34px; left: 0; width: 38px; height: 38px; }
+
+  .parcel-panel { background: var(--paper); border-radius: var(--radius); padding: 26px 30px 22px; margin: 28px 0 24px; }
+
+  form { display: grid; gap: 16px; }
   label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
   input, select, textarea {
     font: inherit; width: 100%; padding: 12px 13px; border-radius: 10px;
@@ -83,30 +146,96 @@
   .field-row { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .hint { font-size: 14px; color: var(--ink-soft); margin-top: 5px; }
 
+  .booking-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: start; }
+  .next-panel { background: var(--brand); border-radius: var(--radius); padding: 28px; color: #fff; }
+  .next-panel h3 { color: #fff; }
+  .next-list { display: grid; gap: 12px; margin-top: 14px; font-size: 15px; color: rgba(255,255,255,.86); }
+  .next-list div { display: flex; gap: 10px; }
+  .next-list .n { color: var(--accent); font-weight: 700; }
+
   .note { border-radius: 10px; padding: 14px 16px; font-size: 15px; }
   .note.ok { background: #e8f5ee; color: var(--ok); }
   .note.err { background: #fdecea; color: #a02020; }
   .track-row { display: flex; gap: 10px; flex-wrap: wrap; max-width: 520px; }
   .track-row input { flex: 1 1 220px; }
 
-  footer { background: var(--brand); color: rgba(255,255,255,.85); padding: 44px 0; }
+  footer { background: var(--brand); color: rgba(255,255,255,.85); padding: 44px 0 40px; position: relative; overflow: hidden; }
   footer a { color: #fff; }
-  .footer-grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .footer-road { position: absolute; left: 0; bottom: 0; width: 100%; height: 60px; opacity: .18; }
+  .footer-grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); position: relative; }
 
+  @media (max-width: 900px) {
+    .hero, .booking-grid { grid-template-columns: 1fr; gap: 28px; }
+    .booking-grid { gap: 32px; }
+  }
   @media (max-width: 600px) {
     section { padding: 48px 0; }
-    header .wrap { padding-bottom: 54px; }
-    .topbar { padding-bottom: 34px; }
+    header .wrap { padding-bottom: 30px; }
+    .topbar { padding-bottom: 30px; }
     .topbar nav { gap: 14px; }
+    .hero-actions { flex-direction: column; align-items: stretch; }
+    .hero-actions .btn { min-height: 48px; }
+    .corridor { padding: 18px; }
+    .track-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .parcel-panel { padding: 20px 16px 16px; }
   }
 </style>
 </head>
 <body>
 
+<!-- ══ illustration symbols ══ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="van" viewBox="0 0 250 112">
+    <ellipse cx="128" cy="103" rx="112" ry="7" fill="#10203a" opacity=".13"/>
+    <rect x="18" y="24" width="170" height="62" rx="10" fill="#ffffff" stroke="#10203a" stroke-width="3"/>
+    <path d="M188 28 h20 l26 28 v30 h-46 z" fill="#ffffff" stroke="#10203a" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M193 34 h13 l17 19 h-30 z" fill="#cfe0f2" stroke="#10203a" stroke-width="2.5" stroke-linejoin="round"/>
+    <rect x="34" y="36" width="54" height="27" rx="5" fill="#cfe0f2" stroke="#10203a" stroke-width="2.5"/>
+    <rect x="98" y="36" width="54" height="27" rx="5" fill="#cfe0f2" stroke="#10203a" stroke-width="2.5"/>
+    <rect x="18" y="70" width="170" height="9" fill="#d98218"/>
+    <path d="M162 24 v62" stroke="#10203a" stroke-width="2.5"/>
+    <rect x="228" y="60" width="8" height="9" rx="2" fill="#d98218"/>
+    <circle cx="66" cy="88" r="15" fill="#10203a"/>
+    <circle cx="66" cy="88" r="6" fill="#f5f3ee" class="wheel"/>
+    <path d="M66 82 v12 M60 88 h12" stroke="#10203a" stroke-width="2" class="wheel"/>
+    <circle cx="206" cy="88" r="15" fill="#10203a"/>
+    <circle cx="206" cy="88" r="6" fill="#f5f3ee" class="wheel"/>
+    <path d="M206 82 v12 M200 88 h12" stroke="#10203a" stroke-width="2" class="wheel"/>
+  </symbol>
+
+  <symbol id="parcel" viewBox="0 0 64 64">
+    <rect x="7" y="17" width="50" height="38" rx="4" fill="#e8c79a" stroke="#10203a" stroke-width="3"/>
+    <path d="M7 30 h50" stroke="#10203a" stroke-width="3"/>
+    <path d="M32 17 v38" stroke="#10203a" stroke-width="3"/>
+    <path d="M22 17 l10 -9 l10 9" fill="#f0d9b8" stroke="#10203a" stroke-width="3" stroke-linejoin="round"/>
+  </symbol>
+
+  <symbol id="traveller" viewBox="0 0 70 120">
+    <circle cx="31" cy="19" r="12" fill="#f2c9a0" stroke="#10203a" stroke-width="3"/>
+    <path d="M20 14 q11 -12 22 0 q-11 -5 -22 0 z" fill="#10203a"/>
+    <path d="M31 33 q-15 3 -15 20 v30 h30 v-30 q0 -17 -15 -20 z" fill="#123a6d" stroke="#10203a" stroke-width="3"/>
+    <path d="M20 83 v27 M42 83 v27" stroke="#10203a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M46 50 q10 4 10 16" fill="none" stroke="#10203a" stroke-width="3" stroke-linecap="round"/>
+    <rect x="46" y="66" width="22" height="27" rx="3" fill="#d98218" stroke="#10203a" stroke-width="3"/>
+    <path d="M52 66 v-6 h10 v6" fill="none" stroke="#10203a" stroke-width="3"/>
+  </symbol>
+</svg>
+
 <header>
+  <svg class="header-glow" viewBox="0 0 1440 260" preserveAspectRatio="none" aria-hidden="true">
+    <circle cx="1180" cy="40" r="150" fill="#1a4d8a"/>
+    <circle cx="240" cy="10" r="120" fill="#0e3160"/>
+  </svg>
+
   <div class="wrap">
     <div class="topbar">
-      <div class="logo">Перевізник Україна–Чехія</div>
+      <div class="logo">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d98218" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 16V9a1 1 0 0 1 1-1h9v8"/><path d="M13 11h4l3 3v2h-7"/>
+          <circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>
+        </svg>
+        <span>Перевізник Україна–Чехія</span>
+      </div>
       <nav>
         <a href="#routes">Маршрути</a>
         <a href="#parcels">Посилки</a>
@@ -114,14 +243,51 @@
         <a href="#contacts">Контакти</a>
       </nav>
     </div>
-    <h1>Пасажири та посилки Україна ⇄ Чехія</h1>
-    <p class="lead">
-      Забираємо з-під дому й довозимо за адресою. Мікроавтобуси на 8 місць,
-      два виїзди на тиждень у кожен бік, посилки з фото і трек-номером.
-    </p>
-    <div class="hero-actions">
-      <a class="btn" href="#booking">Забронювати місце</a>
-      <a class="btn outline" href="tel:+380687297990">+380 68 729 79 90</a>
+
+    <div class="hero">
+      <div class="reveal in">
+        <div class="badge"><span class="dot"></span> Два виїзди на тиждень у кожен бік</div>
+        <h1>Пасажири та посилки Україна ⇄ Чехія</h1>
+        <p class="lead">
+          Забираємо з-під дому й довозимо за адресою. Мікроавтобуси на 8 місць,
+          посилки з фото і трек-номером.
+        </p>
+        <div class="hero-actions">
+          <a class="btn" href="#booking">Забронювати місце</a>
+          <a class="btn outline" href="tel:+380687297990">+380 68 729 79 90</a>
+        </div>
+      </div>
+
+      <div class="reveal in" style="animation-delay:.12s">
+        <svg viewBox="0 0 560 330" style="width:100%;height:auto" role="img"
+             aria-label="Мікроавтобус вирушає в дорогу, пасажири з валізами й посилки">
+          <defs><clipPath id="scene-clip"><rect x="0" y="0" width="560" height="330" rx="18"/></clipPath></defs>
+          <g clip-path="url(#scene-clip)">
+            <rect width="560" height="330" fill="#0e3160"/>
+            <circle cx="452" cy="74" r="42" fill="#d98218" opacity=".9"/>
+            <circle cx="452" cy="74" r="62" fill="#d98218" opacity=".16"/>
+            <g class="cloud" opacity=".22">
+              <ellipse cx="150" cy="70" rx="52" ry="17" fill="#fff"/>
+              <ellipse cx="196" cy="62" rx="34" ry="14" fill="#fff"/>
+            </g>
+            <g class="cloud slow" opacity=".14">
+              <ellipse cx="420" cy="132" rx="60" ry="16" fill="#fff"/>
+              <ellipse cx="470" cy="126" rx="36" ry="12" fill="#fff"/>
+            </g>
+            <path d="M0 196 L96 140 L182 196 Z" fill="#123a6d"/>
+            <path d="M140 196 L250 128 L360 196 Z" fill="#16457c"/>
+            <path d="M320 196 L430 146 L560 196 Z" fill="#123a6d"/>
+            <rect y="196" width="560" height="134" fill="#f5f3ee"/>
+            <rect y="212" width="560" height="70" fill="#3b4658"/>
+            <path d="M0 247 H560" stroke="#f5f3ee" stroke-width="5" stroke-dasharray="34 26" class="road-dash"/>
+            <g transform="translate(28 168) scale(.62)"><use href="#traveller" width="70" height="120"/></g>
+            <g transform="translate(78 182) scale(.5)"><use href="#traveller" width="70" height="120"/></g>
+            <g transform="translate(122 236) scale(.62)"><use href="#parcel" width="64" height="64"/></g>
+            <g transform="translate(156 248) scale(.48)"><use href="#parcel" width="64" height="64"/></g>
+            <g class="van-bob" transform="translate(236 176) scale(1.16)"><use href="#van" width="250" height="112"/></g>
+          </g>
+        </svg>
+      </div>
     </div>
   </div>
 </header>
@@ -134,18 +300,38 @@
       розвозимо адресно по Чехії. Проміжні міста — за домовленістю.
     </p>
 
-    <div class="grid cols-2" style="margin-top: 28px">
-      <div class="card">
-        <span class="when">Вівторок і п'ятниця</span>
-        <h3 style="margin-top: 12px">З України до Чехії</h3>
+    <div class="corridor">
+      <div class="corridor-ends"><span>Україна</span><span>Чехія</span></div>
+      <div class="corridor-line">
+        <div class="corridor-track"></div>
+        <svg class="corridor-van crossing" viewBox="0 0 250 112" aria-hidden="true"><use href="#van" width="250" height="112"/></svg>
+      </div>
+      <div class="corridor-note">≈ 1100 км · виїзд зранку, прибуття наступного дня</div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="card reveal">
+        <div class="card-head">
+          <div>
+            <span class="when">Вівторок і п'ятниця</span>
+            <h3 style="margin-top:12px">З України до Чехії</h3>
+          </div>
+          <svg class="card-van" viewBox="0 0 250 112" aria-hidden="true"><use href="#van" width="250" height="112"/></svg>
+        </div>
         <p class="muted small">Виїзд зранку, прибуття наступного дня.</p>
         <ul class="cities">
           <li>Сарни</li><li>Рівне</li><li>Остріг</li><li>Луцьк</li><li>Львів</li>
         </ul>
       </div>
-      <div class="card">
-        <span class="when">Четвер і неділя</span>
-        <h3 style="margin-top: 12px">З Чехії до України</h3>
+
+      <div class="card reveal">
+        <div class="card-head">
+          <div>
+            <span class="when">Четвер і неділя</span>
+            <h3 style="margin-top:12px">З Чехії до України</h3>
+          </div>
+          <svg class="card-van back" viewBox="0 0 250 112" aria-hidden="true"><use href="#van" width="250" height="112"/></svg>
+        </div>
         <p class="muted small">Забираємо за адресою у будь-якому з міст.</p>
         <ul class="cities">
           <li>Praha</li><li>Brno</li><li>Liberec</li><li>Hradec Králové</li>
@@ -154,17 +340,27 @@
       </div>
     </div>
 
-    <div class="grid cols-3" style="margin-top: 20px">
-      <div class="card">
-        <h3>Адресна подача</h3>
+    <div class="grid cols-3" style="margin-top:20px">
+      <div class="card reveal">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d98218" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>
+        </svg>
+        <h3 style="margin-top:12px">Адресна подача</h3>
         <p class="muted small">Не треба їхати на вокзал — забираємо з дому й довозимо до дверей.</p>
       </div>
-      <div class="card">
-        <h3>8 місць у салоні</h3>
+      <div class="card reveal">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d98218" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="9" cy="7" r="3"/><path d="M3 20v-1.5A4.5 4.5 0 0 1 7.5 14h3A4.5 4.5 0 0 1 15 18.5V20"/>
+          <path d="M16 7.5a3 3 0 0 1 0 5"/><path d="M18 14a4.5 4.5 0 0 1 3 4.2V20"/>
+        </svg>
+        <h3 style="margin-top:12px">8 місць у салоні</h3>
         <p class="muted small">Комфортні мікроавтобуси, три машини на маршрутах.</p>
       </div>
-      <div class="card">
-        <h3>Сповіщення в Telegram</h3>
+      <div class="card reveal">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d98218" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 4 10.5 14.5"/><path d="M21 4 14.5 21l-4-6.5L4 10.5 21 4z"/>
+        </svg>
+        <h3 style="margin-top:12px">Сповіщення в Telegram</h3>
         <p class="muted small">За день до виїзду — час подачі й контакт водія. У день виїзду — коли водій вирушив.</p>
       </div>
     </div>
@@ -179,13 +375,25 @@
       при прийомі, видаємо трек-номер і повідомляємо про кожен етап.
     </p>
 
-    <div class="grid cols-3" style="margin: 28px 0">
-      <div class="card"><h3>Забираємо за адресою</h3>
+    <div class="parcel-panel">
+      <div class="track-rail">
+        <svg class="track-parcel crossing" viewBox="0 0 64 64" aria-hidden="true"><use href="#parcel" width="64" height="64"/></svg>
+      </div>
+      <div class="track-steps">
+        <div class="track-step"><div class="step-dot"></div>Прийнято</div>
+        <div class="track-step"><div class="step-dot" style="animation-delay:.9s"></div>В дорозі</div>
+        <div class="track-step"><div class="step-dot" style="animation-delay:1.8s"></div>Перетнули кордон</div>
+        <div class="track-step"><div class="step-dot" style="animation-delay:2.7s"></div>Доставлено</div>
+      </div>
+    </div>
+
+    <div class="grid cols-3" style="margin-bottom:34px">
+      <div class="card plain reveal"><h3>Забираємо за адресою</h3>
         <p class="muted small">Або приносьте самі — як зручніше.</p></div>
-      <div class="card"><h3>Доставка додому або на Нову Пошту</h3>
+      <div class="card plain reveal"><h3>Доставка додому або на Нову Пошту</h3>
         <p class="muted small">По Чехії — за адресою, по Україні — за адресою чи у відділення.</p></div>
-      <div class="card"><h3>Статус у Telegram</h3>
-        <p class="muted small">Прийнято → в дорозі → перетнули кордон → сьогодні доставка.</p></div>
+      <div class="card plain reveal"><h3>Фото при прийомі</h3>
+        <p class="muted small">Знімок зберігається в системі — видно, у якому стані посилку прийняли.</p></div>
     </div>
 
     <h3>Перевірити посилку</h3>
@@ -199,70 +407,97 @@
 
 <section id="booking">
   <div class="wrap">
-    <h2>Забронювати місце</h2>
-    <p class="lead">
-      Заповніть форму — ми передзвонимо для підтвердження. Або напишіть у
-      <a href="#contacts">Telegram-бот</a>, там бронювання займає хвилину.
-    </p>
-
-    <form id="booking-form" style="margin-top: 26px">
+    <div class="booking-grid">
       <div>
-        <label for="ride">Рейс</label>
-        <select id="ride" required></select>
-        <div class="hint" id="ride-hint">Завантажуємо найближчі рейси…</div>
+        <h2>Забронювати місце</h2>
+        <p class="lead">
+          Заповніть форму — ми передзвонимо для підтвердження. Або напишіть у
+          <a href="#contacts">Telegram-бот</a>, там бронювання займає хвилину.
+        </p>
+
+        <form id="booking-form" style="margin-top:26px">
+          <div>
+            <label for="ride">Рейс</label>
+            <select id="ride" required></select>
+            <div class="hint" id="ride-hint">Завантажуємо найближчі рейси…</div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label for="from-stop">Звідки забрати</label>
+              <select id="from-stop" required></select>
+            </div>
+            <div>
+              <label for="to-stop">Куди довезти</label>
+              <select id="to-stop" required></select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label for="from-address">Адреса подачі</label>
+              <input id="from-address" placeholder="вул. Соборна 12, кв. 4">
+            </div>
+            <div>
+              <label for="to-address">Адреса висадки</label>
+              <input id="to-address" placeholder="Vinohradská 25">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label for="name">Ім'я та прізвище</label>
+              <input id="name" required autocomplete="name">
+            </div>
+            <div>
+              <label for="phone">Телефон</label>
+              <input id="phone" type="tel" required autocomplete="tel" placeholder="+380 __ ___ __ __">
+            </div>
+            <div>
+              <label for="seats">Місць</label>
+              <input id="seats" type="number" min="1" max="8" value="1" required>
+            </div>
+          </div>
+
+          <div>
+            <label for="comment">Коментар</label>
+            <textarea id="comment" rows="2" placeholder="Багаж, дитяче крісло, зупинка по дорозі…"></textarea>
+          </div>
+
+          <div>
+            <button class="btn" type="submit" id="submit-btn">Забронювати</button>
+          </div>
+          <div id="booking-result"></div>
+        </form>
       </div>
 
-      <div class="field-row">
-        <div>
-          <label for="from-stop">Звідки забрати</label>
-          <select id="from-stop" required></select>
-        </div>
-        <div>
-          <label for="to-stop">Куди довезти</label>
-          <select id="to-stop" required></select>
-        </div>
-      </div>
-
-      <div class="field-row">
-        <div>
-          <label for="from-address">Адреса подачі</label>
-          <input id="from-address" placeholder="вул. Соборна 12, кв. 4">
-        </div>
-        <div>
-          <label for="to-address">Адреса висадки</label>
-          <input id="to-address" placeholder="Vinohradská 25">
+      <div class="next-panel">
+        <svg viewBox="0 0 300 190" style="width:100%;height:auto;margin-bottom:14px" role="img"
+             aria-label="Пасажири біля будинку чекають на бус">
+          <rect width="300" height="190" rx="12" fill="#0e3160"/>
+          <path d="M0 150 H300" stroke="#1a4d8a" stroke-width="3"/>
+          <path d="M34 150 V96 l30 -26 l30 26 V150 Z" fill="#123a6d" stroke="#7ea8d8" stroke-width="2.5" stroke-linejoin="round"/>
+          <rect x="52" y="112" width="24" height="38" fill="#d98218"/>
+          <g transform="translate(120 66) scale(.7)"><use href="#traveller" width="70" height="120"/></g>
+          <g transform="translate(168 82) scale(.56)"><use href="#traveller" width="70" height="120"/></g>
+          <g transform="translate(214 116) scale(.55)"><use href="#parcel" width="64" height="64"/></g>
+          <circle cx="262" cy="44" r="18" fill="#d98218" opacity=".85"/>
+        </svg>
+        <h3>Що далі після бронювання</h3>
+        <div class="next-list">
+          <div><span class="n">1</span><span>Передзвонимо й підтвердимо місце та адресу подачі.</span></div>
+          <div><span class="n">2</span><span>За день до виїзду надішлемо час подачі й контакт водія.</span></div>
+          <div><span class="n">3</span><span>У день виїзду напишемо, коли водій вирушив до вас.</span></div>
         </div>
       </div>
-
-      <div class="field-row">
-        <div>
-          <label for="name">Ім'я та прізвище</label>
-          <input id="name" required autocomplete="name">
-        </div>
-        <div>
-          <label for="phone">Телефон</label>
-          <input id="phone" type="tel" required autocomplete="tel" placeholder="+380 __ ___ __ __">
-        </div>
-        <div>
-          <label for="seats">Місць</label>
-          <input id="seats" type="number" min="1" max="8" value="1" required>
-        </div>
-      </div>
-
-      <div>
-        <label for="comment">Коментар</label>
-        <textarea id="comment" rows="2" placeholder="Багаж, дитяче крісло, зупинка по дорозі…"></textarea>
-      </div>
-
-      <div>
-        <button class="btn" type="submit" id="submit-btn">Забронювати</button>
-      </div>
-      <div id="booking-result"></div>
-    </form>
+    </div>
   </div>
 </section>
 
 <footer id="contacts">
+  <svg class="footer-road" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 40 H1440" stroke="#f5f3ee" stroke-width="3" stroke-dasharray="34 26" class="road-dash"/>
+  </svg>
   <div class="wrap footer-grid">
     <div>
       <h3 style="color:#fff">Телефони</h3>
@@ -409,7 +644,33 @@ async function trackParcel() {
 $('track-btn').onclick = trackParcel;
 $('track-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') trackParcel(); });
 
+// Reveal cards as they scroll into view; without IntersectionObserver they just show.
+const revealables = document.querySelectorAll('.reveal:not(.in)');
+if ('IntersectionObserver' in window) {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (!entry.isIntersecting) return;
+      entry.target.style.animationDelay = `${(i % 3) * 0.08}s`;
+      entry.target.classList.add('in');
+      observer.unobserve(entry.target);
+    });
+  }, { rootMargin: '0px 0px -12% 0px' });
+  revealables.forEach((el) => observer.observe(el));
+} else {
+  revealables.forEach((el) => el.classList.add('in'));
+}
+
+// The travelling van and parcel run the width of their own track.
+function sizeRuns() {
+  document.querySelectorAll('.corridor-line, .track-rail').forEach((track) => {
+    const mover = track.querySelector('.crossing');
+    if (mover) mover.style.setProperty('--run', `${track.clientWidth - mover.clientWidth}px`);
+  });
+}
+window.addEventListener('resize', sizeRuns);
+
 (async () => {
+  sizeRuns();
   try {
     const { bot_username } = await getJSON('/api/public/config');
     if (bot_username) {
