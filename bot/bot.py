@@ -19,6 +19,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_BASE       = os.getenv("API_BASE", "http://localhost:8000")
 BOT_API_KEY    = os.getenv("BOT_API_KEY", "bot-secret-key")
+NOTIFY_POLL_SECONDS = int(os.getenv("NOTIFY_POLL_SECONDS", "20"))
 
 bot     = Bot(token=TELEGRAM_TOKEN)
 storage = MemoryStorage()
@@ -62,7 +63,9 @@ async def api_delete(path: str):
 class BookingStates(StatesGroup):
     choosing_ride  = State()
     choosing_from  = State()
+    from_address   = State()
     choosing_to    = State()
+    to_address     = State()
     phone          = State()
     name           = State()
     seats          = State()
@@ -104,6 +107,26 @@ def public_kb():
         [KeyboardButton(text='/автопарк')],
         [KeyboardButton(text='/help')],
     ], resize_keyboard=True)
+
+
+def phone_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📱 Поділитися номером", request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+async def link_contact(phone: str, tg_user: types.User):
+    """Remember phone → telegram_id so we can reach this passenger later."""
+    try:
+        await api_post("/api/notifications/contacts", {
+            "phone":       phone,
+            "telegram_id": tg_user.id,
+            "full_name":   tg_user.full_name,
+        })
+    except Exception:
+        pass
 
 
 # ── Commands ──────────────────────────────────────────────────────────────────
@@ -212,17 +235,25 @@ async def book_select_ride(callback: types.CallbackQuery, state: FSMContext):
 async def book_from_stop(callback: types.CallbackQuery, state: FSMContext):
     _, stop_id, city = callback.data.split(":", 2)
     await state.update_data(from_stop_id=int(stop_id), from_stop_city=city)
+    await state.set_state(BookingStates.from_address)
+    await callback.message.answer(
+        f"Вкажіть адресу подачі в місті {city} (вулиця, будинок).\n"
+        "Якщо зручніше сісти на загальній зупинці — напишіть '-'."
+    )
+    await callback.answer()
 
+
+async def _ask_dropoff(message: types.Message, state: FSMContext):
     data = await state.get_data()
     all_stops = data.get("all_stops", [])
-    from_order = next((s["order"] for s in all_stops if s["id"] == int(stop_id)), 0)
+    from_id = data.get("from_stop_id")
+    from_order = next((s["order"] for s in all_stops if s["id"] == from_id), 0)
     dropoff_stops = [s for s in all_stops if s.get("dropoff") and s["order"] > from_order]
 
     if not dropoff_stops:
         await state.update_data(to_stop_id=None, to_stop_city="?")
         await state.set_state(BookingStates.phone)
-        await callback.message.answer("Введіть ваш номер телефону:")
-        await callback.answer()
+        await message.answer("Ваш номер телефону:", reply_markup=phone_kb())
         return
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -230,29 +261,59 @@ async def book_from_stop(callback: types.CallbackQuery, state: FSMContext):
         for s in dropoff_stops
     ])
     await state.set_state(BookingStates.choosing_to)
-    await callback.message.answer("Куди їдете?", reply_markup=kb)
-    await callback.answer()
+    await message.answer("Куди їдете?", reply_markup=kb)
+
+
+@dp.message(StateFilter(BookingStates.from_address))
+async def book_from_address(message: types.Message, state: FSMContext):
+    address = message.text.strip()
+    await state.update_data(from_address=None if address == '-' else address)
+    await _ask_dropoff(message, state)
 
 
 @dp.callback_query(lambda c: c.data and c.data.startswith("to_stop:"))
 async def book_to_stop(callback: types.CallbackQuery, state: FSMContext):
     _, stop_id, city = callback.data.split(":", 2)
     await state.update_data(to_stop_id=int(stop_id), to_stop_city=city)
-    await state.set_state(BookingStates.phone)
-    await callback.message.answer("Введіть ваш номер телефону:")
+    await state.set_state(BookingStates.to_address)
+    await callback.message.answer(
+        f"Вкажіть адресу висадки в місті {city} (вулиця, будинок).\n"
+        "Якщо висадка на загальній зупинці — напишіть '-'."
+    )
     await callback.answer()
+
+
+@dp.message(StateFilter(BookingStates.to_address))
+async def book_to_address(message: types.Message, state: FSMContext):
+    address = message.text.strip()
+    await state.update_data(to_address=None if address == '-' else address)
+    await state.set_state(BookingStates.phone)
+    await message.answer("Ваш номер телефону:", reply_markup=phone_kb())
 
 
 @dp.message(StateFilter(BookingStates.phone))
 async def booking_phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.text.strip())
+    phone = message.contact.phone_number if message.contact else (message.text or "").strip()
+    if not phone:
+        await message.answer("Надішліть номер телефону текстом або кнопкою нижче:", reply_markup=phone_kb())
+        return
+    await state.update_data(phone=phone)
+    await link_contact(phone, message.from_user)
     await state.set_state(BookingStates.name)
-    await message.answer("Введіть ваше ПІБ:")
+
+    suggested = message.from_user.full_name
+    await message.answer(
+        f"Введіть ваше ПІБ (або надішліть '-' щоб залишити «{suggested}»):",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
 
 
 @dp.message(StateFilter(BookingStates.name))
 async def booking_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
+    name = message.text.strip()
+    if name == '-':
+        name = message.from_user.full_name
+    await state.update_data(name=name)
     await state.set_state(BookingStates.seats)
     await message.answer("Скільки місць бронюєте?")
 
@@ -283,7 +344,11 @@ async def booking_comment(message: types.Message, state: FSMContext):
         "seats":        data["seats"],
         "from_stop_id": data.get("from_stop_id"),
         "to_stop_id":   data.get("to_stop_id"),
+        "from_address": data.get("from_address"),
+        "to_address":   data.get("to_address"),
         "comment":      comment,
+        "telegram_id":  message.from_user.id,
+        "source":       "bot",
     }
 
     try:
@@ -296,13 +361,21 @@ async def booking_comment(message: types.Message, state: FSMContext):
 
     from_city = data.get("from_stop_city", "?")
     to_city   = data.get("to_stop_city",   "?")
-    await message.answer(
+    text = (
         f"Бронювання підтверджено! id={booking['id']}\n"
         f"ПІБ: {data['name']}\nТелефон: {data['phone']}\n"
         f"Маршрут: {from_city} → {to_city}\n"
-        f"Місць: {data['seats']}\n\n"
-        "За добу до виїзду ми вам зателефонуємо."
     )
+    if data.get("from_address"):
+        text += f"Подача: {data['from_address']}\n"
+    if data.get("to_address"):
+        text += f"Висадка: {data['to_address']}\n"
+    text += (
+        f"Місць: {data['seats']}\n\n"
+        "За добу до виїзду надішлемо нагадування з часом подачі, "
+        "а в день виїзду — повідомлення коли водій вирушить."
+    )
+    await message.answer(text, reply_markup=public_kb())
     await state.clear()
 
 
@@ -610,8 +683,33 @@ async def set_commands():
     ], scope=BotCommandScopeDefault())
 
 
+async def deliver_notifications():
+    """Poll the API outbox and deliver queued messages to passengers."""
+    while True:
+        try:
+            pending = await api_get("/api/notifications/pending")
+        except Exception:
+            await asyncio.sleep(NOTIFY_POLL_SECONDS)
+            continue
+
+        for note in pending:
+            try:
+                await bot.send_message(chat_id=note["telegram_id"], text=note["text"])
+                ack = {"status": "sent"}
+            except Exception as e:
+                ack = {"status": "failed", "error": str(e)[:500]}
+            try:
+                await api_post(f"/api/notifications/{note['id']}/ack", ack)
+            except Exception:
+                pass
+            await asyncio.sleep(0.05)   # stay under Telegram's rate limit
+
+        await asyncio.sleep(NOTIFY_POLL_SECONDS)
+
+
 async def main():
     await set_commands()
+    asyncio.create_task(deliver_notifications())
     await dp.start_polling(bot)
 
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-import models, schemas
+import models, schemas, notify
 from database import get_db
 from auth import require_driver
 
@@ -43,6 +43,25 @@ def my_ride_detail(
         "bookings": [schemas.BookingOut.model_validate(b) for b in bookings],
         "parcels":  [schemas.ParcelOut.model_validate(p) for p in parcels],
     }
+
+
+@router.post("/rides/{ride_id}/start")
+def start_ride(
+    ride_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_driver),
+):
+    """Driver taps 'виїхав' — every passenger with Telegram gets an ETA message."""
+    ride = db.query(models.Ride).filter(models.Ride.id == ride_id).first()
+    if not ride:
+        raise HTTPException(status_code=404, detail="Ride not found")
+    if user.role == "driver" and ride.driver_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your ride")
+    if ride.status == "cancelled":
+        raise HTTPException(status_code=400, detail="Ride is cancelled")
+
+    notified = notify.notify_ride_departed(db, ride)
+    return {"ok": True, "notified": notified, "status": ride.status}
 
 
 @router.patch("/rides/{ride_id}/stop/{stop_id}")

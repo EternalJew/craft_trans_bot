@@ -1,4 +1,7 @@
 import os
+from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
@@ -7,16 +10,37 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-from database import engine, get_db
+from database import engine, get_db, SessionLocal
 import models
 import schemas
+import notify
 from auth import authenticate_user, create_access_token
-from routers import routes, rides, bookings, parcels, users, driver, vehicles
+from routers import routes, rides, bookings, parcels, users, driver, vehicles, notifications
 
 # Create all tables on startup
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="CraftTrans API", version="1.0.0")
+REMINDER_HOUR = int(os.getenv("REMINDER_HOUR", "10"))
+
+
+def queue_day_before_reminders():
+    db = SessionLocal()
+    try:
+        notify.generate_day_before_reminders(db)
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "Europe/Kyiv"))
+    scheduler.add_job(queue_day_before_reminders, "cron", hour=REMINDER_HOUR, minute=0)
+    scheduler.start()
+    yield
+    scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="CraftTrans API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,6 +57,7 @@ app.include_router(parcels.router)
 app.include_router(users.router)
 app.include_router(driver.router)
 app.include_router(vehicles.router)
+app.include_router(notifications.router)
 
 
 @app.post("/auth/token", response_model=schemas.Token)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, Text, DateTime, Boolean, Float
+from sqlalchemy import Column, Integer, String, Date, Time, ForeignKey, Text, DateTime, Boolean, Float
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime
@@ -49,11 +49,13 @@ class Ride(Base):
     route_id    = Column(Integer, ForeignKey("routes.id"), nullable=False)
     driver_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
     date        = Column(Date, nullable=False)
+    departure_time = Column(Time, nullable=True)
     seats_total = Column(Integer, nullable=False)
     seats_free  = Column(Integer, nullable=False)
     vehicle     = Column(String, nullable=True)
     price       = Column(Integer, nullable=True)
-    status      = Column(String, default="active")  # "active" | "cancelled"
+    status      = Column(String, default="active")  # "active" | "in_progress" | "completed" | "cancelled"
+    started_at  = Column(DateTime, nullable=True)
 
     route    = relationship("Route", back_populates="rides")
     driver   = relationship("User", back_populates="assigned_rides", foreign_keys=[driver_id])
@@ -70,9 +72,17 @@ class Booking(Base):
     seats        = Column(Integer, nullable=False)
     from_stop_id = Column(Integer, ForeignKey("stops.id"), nullable=True)
     to_stop_id   = Column(Integer, ForeignKey("stops.id"), nullable=True)
+    from_address = Column(String, nullable=True)   # door-to-door pickup address
+    to_address   = Column(String, nullable=True)   # door-to-door dropoff address
+    pickup_time  = Column(Time, nullable=True)     # ETA at the pickup address
     comment      = Column(String, nullable=True)
+    telegram_id  = Column(Integer, nullable=True, index=True)
+    source       = Column(String, default="bot")   # "bot" | "web" | "admin"
     created_at   = Column(DateTime, default=datetime.utcnow)
     status       = Column(String, default="confirmed")
+
+    reminded_day_before = Column(Boolean, default=False)
+    reminded_departure  = Column(Boolean, default=False)
 
     ride      = relationship("Ride", back_populates="bookings")
     from_stop = relationship("Stop", foreign_keys=[from_stop_id])
@@ -94,6 +104,32 @@ class Parcel(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
 
     ride = relationship("Ride", back_populates="parcels")
+
+
+# ── Notifications ──────────────────────────────────────────────────────────────
+
+class Notification(Base):
+    """Outbox: the API writes messages here, the bot polls and delivers them."""
+    __tablename__ = "notifications"
+    id          = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(Integer, nullable=False, index=True)
+    text        = Column(Text, nullable=False)
+    kind        = Column(String, nullable=False)  # day_before | departure | parcel_status
+    status      = Column(String, default="pending", index=True)  # pending | sent | failed
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    sent_at     = Column(DateTime, nullable=True)
+    error       = Column(Text, nullable=True)
+
+
+class TelegramContact(Base):
+    """Maps a phone number to a Telegram account so we can reach people who
+    booked through the website or were entered by an admin."""
+    __tablename__ = "telegram_contacts"
+    id          = Column(Integer, primary_key=True, index=True)
+    phone       = Column(String, unique=True, nullable=False, index=True)
+    telegram_id = Column(Integer, nullable=False)
+    full_name   = Column(String, nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
 
 
 # ── Vehicle tracking ───────────────────────────────────────────────────────────

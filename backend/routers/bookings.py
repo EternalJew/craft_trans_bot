@@ -37,7 +37,11 @@ def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
         seats=body.seats,
         from_stop_id=body.from_stop_id,
         to_stop_id=body.to_stop_id,
+        from_address=body.from_address,
+        to_address=body.to_address,
         comment=body.comment,
+        telegram_id=body.telegram_id,
+        source=body.source,
         status="confirmed",
     )
     db.add(booking)
@@ -67,6 +71,12 @@ def update_booking(
 
     if body.comment is not None:
         booking.comment = body.comment
+    if body.from_address is not None:
+        booking.from_address = body.from_address
+    if body.to_address is not None:
+        booking.to_address = body.to_address
+    if body.pickup_time is not None:
+        booking.pickup_time = body.pickup_time
 
     db.commit()
     db.refresh(booking)

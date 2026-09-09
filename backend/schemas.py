@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 
 # ── User ──────────────────────────────────────────────────────────────────────
@@ -73,11 +73,12 @@ class RouteShort(BaseModel):
 # ── Ride ──────────────────────────────────────────────────────────────────────
 
 class RideBase(BaseModel):
-    route_id:    int
-    date:        date
-    seats_total: int
-    vehicle:     Optional[str] = None
-    price:       Optional[int] = None
+    route_id:       int
+    date:           date
+    departure_time: Optional[time] = None
+    seats_total:    int
+    vehicle:        Optional[str] = None
+    price:          Optional[int] = None
 
 class RideCreate(RideBase):
     pass
@@ -86,6 +87,7 @@ class RideOut(RideBase):
     id:         int
     seats_free: int
     status:     str
+    started_at: Optional[datetime] = None
     driver_id:  Optional[int] = None
     driver:     Optional[UserOut] = None
     route:      RouteShort
@@ -101,21 +103,29 @@ class BookingBase(BaseModel):
     seats:        int
     from_stop_id: Optional[int] = None
     to_stop_id:   Optional[int] = None
+    from_address: Optional[str] = None
+    to_address:   Optional[str] = None
     comment:      Optional[str] = None
 
 class BookingCreate(BookingBase):
-    pass
+    telegram_id: Optional[int] = None
+    source:      str = "bot"
 
 class BookingUpdate(BaseModel):
-    seats:   Optional[int] = None
-    comment: Optional[str] = None
+    seats:        Optional[int] = None
+    comment:      Optional[str] = None
+    from_address: Optional[str] = None
+    to_address:   Optional[str] = None
+    pickup_time:  Optional[time] = None
 
 class BookingOut(BookingBase):
-    id:         int
-    created_at: datetime
-    status:     str
-    from_stop:  Optional[StopOut] = None
-    to_stop:    Optional[StopOut] = None
+    id:          int
+    pickup_time: Optional[time] = None
+    created_at:  datetime
+    status:      str
+    source:      str
+    from_stop:   Optional[StopOut] = None
+    to_stop:     Optional[StopOut] = None
     model_config = {"from_attributes": True}
 
 
@@ -181,6 +191,34 @@ class VehicleUpdate(BaseModel):
 class VehicleOut(VehicleCreate):
     id:          int
     maintenance: List[MaintenanceRecordOut] = []
+    model_config = {"from_attributes": True}
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+class NotificationOut(BaseModel):
+    id:          int
+    telegram_id: int
+    text:        str
+    kind:        str
+    status:      str
+    created_at:  datetime
+    model_config = {"from_attributes": True}
+
+class NotificationAck(BaseModel):
+    status: str                      # "sent" | "failed"
+    error:  Optional[str] = None
+
+class TelegramContactCreate(BaseModel):
+    phone:       str
+    telegram_id: int
+    full_name:   Optional[str] = None
+
+class TelegramContactOut(BaseModel):
+    id:          int
+    phone:       str
+    telegram_id: int
+    full_name:   Optional[str] = None
     model_config = {"from_attributes": True}
 
 

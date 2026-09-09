@@ -12,7 +12,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 from database import SessionLocal, engine
 import models
 from auth import hash_password
-from datetime import date
+from datetime import date, timedelta, time as dt_time
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -35,45 +35,61 @@ if not existing:
 else:
     print(f"Admin '{admin_username}' already exists")
 
-# ── Create sample route UA → CZ ───────────────────────────────────────────────
+# ── Create the two real route pairs ───────────────────────────────────────────
+# Bus A: Сарни / Рівне / Львів ↔ Hradec Králové / Mladá Boleslav / Liberec
+# Bus B: Остріг / Рівне / Луцьк ↔ Brno / Praha / Chomutov
+UA_A = ["Сарни", "Рівне", "Львів"]
+CZ_A = ["Hradec Králové", "Mladá Boleslav", "Liberec"]
+UA_B = ["Остріг", "Рівне", "Луцьк"]
+CZ_B = ["Brno", "Praha", "Chomutov"]
+
+ROUTES = [
+    ("Захід UA → Чехія (північ)",  "UA->CZ", UA_A, CZ_A),
+    ("Чехія (північ) → Захід UA",  "CZ->UA", CZ_A, UA_A),
+    ("Захід UA → Чехія (Прага)",   "UA->CZ", UA_B, CZ_B),
+    ("Чехія (Прага) → Захід UA",   "CZ->UA", CZ_B, UA_B),
+]
+
 existing_route = db.query(models.Route).first()
 if not existing_route:
-    route = models.Route(name="Київ → Прага", direction="UA->CZ", is_active=True)
-    db.add(route)
-    db.flush()
+    for name, direction, pickup_cities, dropoff_cities in ROUTES:
+        route = models.Route(name=name, direction=direction, is_active=True)
+        db.add(route)
+        db.flush()
 
-    stops_data = [
-        ("Київ",    "UA", True,  False),
-        ("Житомир", "UA", True,  False),
-        ("Рівне",   "UA", True,  False),
-        ("Львів",   "UA", True,  False),
-        ("Краків",  "PL", False, True),
-        ("Острава", "CZ", False, True),
-        ("Прага",   "CZ", False, True),
-    ]
-    for i, (city, country, pickup, dropoff) in enumerate(stops_data):
-        db.add(models.Stop(
-            route_id=route.id,
-            city=city,
-            country=country,
-            order=i,
-            pickup=pickup,
-            dropoff=dropoff,
-        ))
+        origin_country, dest_country = direction.split("->")
+        order = 0
+        for city in pickup_cities:
+            db.add(models.Stop(route_id=route.id, city=city, country=origin_country,
+                               order=order, pickup=True, dropoff=False))
+            order += 1
+        for city in dropoff_cities:
+            db.add(models.Stop(route_id=route.id, city=city, country=dest_country,
+                               order=order, pickup=False, dropoff=True))
+            order += 1
 
-    # Create a sample ride on that route
-    ride = models.Ride(
-        route_id=route.id,
-        date=date.today(),
-        seats_total=8,
-        seats_free=8,
-        vehicle="VW Crafter",
-        price=1200,
-        status="active",
-    )
-    db.add(ride)
     db.commit()
-    print(f"Created route (id={route.id}) with {len(stops_data)} stops and 1 sample ride")
+    print(f"Created {len(ROUTES)} routes with stops")
+
+    # Upcoming rides: UA→CZ leaves Tue/Fri, CZ→UA leaves Thu/Sun
+    DEPARTURE_WEEKDAYS = {"UA->CZ": (1, 4), "CZ->UA": (3, 6)}
+    today = date.today()
+    for route in db.query(models.Route).all():
+        for offset in range(1, 15):
+            day = today + timedelta(days=offset)
+            if day.weekday() not in DEPARTURE_WEEKDAYS[route.direction]:
+                continue
+            db.add(models.Ride(
+                route_id=route.id,
+                date=day,
+                departure_time=dt_time(6, 0),
+                seats_total=8,
+                seats_free=8,
+                price=2000,
+                status="active",
+            ))
+    db.commit()
+    print("Created upcoming rides for the next two weeks")
 else:
     print("Routes already seeded")
 
