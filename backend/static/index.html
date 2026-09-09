@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Перевізник Україна–Чехія · пасажири та посилки</title>
+<meta name="description" content="Пасажирські перевезення та посилки Україна ⇄ Чехія. Адресна подача з Рівного, Луцька, Львова та областей. Виїзди двічі на тиждень.">
+<style>
+  :root {
+    --ink: #10203a;
+    --ink-soft: #55637a;
+    --paper: #ffffff;
+    --sand: #f5f3ee;
+    --line: #e2e0da;
+    --brand: #123a6d;
+    --accent: #d98218;
+    --ok: #1f7a4d;
+    --radius: 14px;
+    --wrap: 1080px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif;
+  }
+  .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 22px; }
+  h1, h2, h3 { line-height: 1.2; margin: 0 0 12px; letter-spacing: -0.02em; }
+  h1 { font-size: clamp(32px, 5.5vw, 52px); }
+  h2 { font-size: clamp(25px, 3.4vw, 34px); }
+  h3 { font-size: 19px; }
+  p { margin: 0 0 14px; }
+  section { padding: 66px 0; border-top: 1px solid var(--line); }
+  .lead { font-size: 19px; color: var(--ink-soft); max-width: 60ch; }
+
+  header { background: var(--brand); color: #fff; }
+  header .wrap { padding-top: 20px; padding-bottom: 74px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center;
+            gap: 16px; flex-wrap: wrap; padding-bottom: 54px; }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+  .topbar nav { display: flex; gap: 20px; flex-wrap: wrap; }
+  .topbar a { color: rgba(255,255,255,.85); text-decoration: none; font-size: 15px; }
+  .topbar a:hover { color: #fff; }
+  header h1 { max-width: 16ch; }
+  header .lead { color: rgba(255,255,255,.82); }
+  .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    font: inherit; font-size: 16px; font-weight: 600; text-decoration: none;
+    padding: 13px 24px; border-radius: 10px; border: 1px solid transparent;
+    background: var(--accent); color: #fff; transition: filter .15s;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.outline { background: transparent; border-color: rgba(255,255,255,.45); color: #fff; }
+  .btn.dark { background: var(--brand); }
+  .btn:disabled { opacity: .55; cursor: default; }
+
+  .grid { display: grid; gap: 20px; }
+  .cols-2 { grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+  .cols-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+  .card { background: var(--sand); border-radius: var(--radius); padding: 24px; }
+  .card h3 { margin-bottom: 8px; }
+  .card p:last-child { margin-bottom: 0; }
+  .muted { color: var(--ink-soft); }
+  .small { font-size: 15px; }
+
+  .cities { list-style: none; margin: 10px 0 0; padding: 0;
+            display: flex; flex-wrap: wrap; gap: 7px; }
+  .cities li { background: var(--paper); border: 1px solid var(--line);
+               border-radius: 999px; padding: 5px 13px; font-size: 14px; }
+  .when { display: inline-block; background: var(--brand); color: #fff;
+          border-radius: 8px; padding: 4px 11px; font-size: 14px; font-weight: 600; }
+
+  form { display: grid; gap: 16px; max-width: 620px; }
+  label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  input, select, textarea {
+    font: inherit; width: 100%; padding: 12px 13px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  .field-row { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .hint { font-size: 14px; color: var(--ink-soft); margin-top: 5px; }
+
+  .note { border-radius: 10px; padding: 14px 16px; font-size: 15px; }
+  .note.ok { background: #e8f5ee; color: var(--ok); }
+  .note.err { background: #fdecea; color: #a02020; }
+  .track-row { display: flex; gap: 10px; flex-wrap: wrap; max-width: 520px; }
+  .track-row input { flex: 1 1 220px; }
+
+  footer { background: var(--brand); color: rgba(255,255,255,.85); padding: 44px 0; }
+  footer a { color: #fff; }
+  .footer-grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  @media (max-width: 600px) {
+    section { padding: 48px 0; }
+    header .wrap { padding-bottom: 54px; }
+    .topbar { padding-bottom: 34px; }
+    .topbar nav { gap: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="logo">Перевізник Україна–Чехія</div>
+      <nav>
+        <a href="#routes">Маршрути</a>
+        <a href="#parcels">Посилки</a>
+        <a href="#booking">Бронювання</a>
+        <a href="#contacts">Контакти</a>
+      </nav>
+    </div>
+    <h1>Пасажири та посилки Україна ⇄ Чехія</h1>
+    <p class="lead">
+      Забираємо з-під дому й довозимо за адресою. Мікроавтобуси на 8 місць,
+      два виїзди на тиждень у кожен бік, посилки з фото і трек-номером.
+    </p>
+    <div class="hero-actions">
+      <a class="btn" href="#booking">Забронювати місце</a>
+      <a class="btn outline" href="tel:+380687297990">+380 68 729 79 90</a>
+    </div>
+  </div>
+</header>
+
+<section id="routes">
+  <div class="wrap">
+    <h2>Маршрути та розклад</h2>
+    <p class="lead">
+      Збираємо пасажирів адресно по Рівненській, Волинській та Львівській областях,
+      розвозимо адресно по Чехії. Проміжні міста — за домовленістю.
+    </p>
+
+    <div class="grid cols-2" style="margin-top: 28px">
+      <div class="card">
+        <span class="when">Вівторок і п'ятниця</span>
+        <h3 style="margin-top: 12px">З України до Чехії</h3>
+        <p class="muted small">Виїзд зранку, прибуття наступного дня.</p>
+        <ul class="cities">
+          <li>Сарни</li><li>Рівне</li><li>Остріг</li><li>Луцьк</li><li>Львів</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="when">Четвер і неділя</span>
+        <h3 style="margin-top: 12px">З Чехії до України</h3>
+        <p class="muted small">Забираємо за адресою у будь-якому з міст.</p>
+        <ul class="cities">
+          <li>Praha</li><li>Brno</li><li>Liberec</li><li>Hradec Králové</li>
+          <li>Mladá Boleslav</li><li>Chomutov</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid cols-3" style="margin-top: 20px">
+      <div class="card">
+        <h3>Адресна подача</h3>
+        <p class="muted small">Не треба їхати на вокзал — забираємо з дому й довозимо до дверей.</p>
+      </div>
+      <div class="card">
+        <h3>8 місць у салоні</h3>
+        <p class="muted small">Комфортні мікроавтобуси, три машини на маршрутах.</p>
+      </div>
+      <div class="card">
+        <h3>Сповіщення в Telegram</h3>
+        <p class="muted small">За день до виїзду — час подачі й контакт водія. У день виїзду — коли водій вирушив.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="parcels">
+  <div class="wrap">
+    <h2>Посилки та передачі</h2>
+    <p class="lead">
+      Возимо документи, ліки, речі й гостинці в обидва боки. Кожну посилку фотографуємо
+      при прийомі, видаємо трек-номер і повідомляємо про кожен етап.
+    </p>
+
+    <div class="grid cols-3" style="margin: 28px 0">
+      <div class="card"><h3>Забираємо за адресою</h3>
+        <p class="muted small">Або приносьте самі — як зручніше.</p></div>
+      <div class="card"><h3>Доставка додому або на Нову Пошту</h3>
+        <p class="muted small">По Чехії — за адресою, по Україні — за адресою чи у відділення.</p></div>
+      <div class="card"><h3>Статус у Telegram</h3>
+        <p class="muted small">Прийнято → в дорозі → перетнули кордон → сьогодні доставка.</p></div>
+    </div>
+
+    <h3>Перевірити посилку</h3>
+    <div class="track-row">
+      <input id="track-input" placeholder="Трек-номер, напр. CT-7K4M2Q" aria-label="Трек-номер">
+      <button class="btn dark" id="track-btn" type="button">Перевірити</button>
+    </div>
+    <div id="track-result" class="hint"></div>
+  </div>
+</section>
+
+<section id="booking">
+  <div class="wrap">
+    <h2>Забронювати місце</h2>
+    <p class="lead">
+      Заповніть форму — ми передзвонимо для підтвердження. Або напишіть у
+      <a href="#contacts">Telegram-бот</a>, там бронювання займає хвилину.
+    </p>
+
+    <form id="booking-form" style="margin-top: 26px">
+      <div>
+        <label for="ride">Рейс</label>
+        <select id="ride" required></select>
+        <div class="hint" id="ride-hint">Завантажуємо найближчі рейси…</div>
+      </div>
+
+      <div class="field-row">
+        <div>
+          <label for="from-stop">Звідки забрати</label>
+          <select id="from-stop" required></select>
+        </div>
+        <div>
+          <label for="to-stop">Куди довезти</label>
+          <select id="to-stop" required></select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div>
+          <label for="from-address">Адреса подачі</label>
+          <input id="from-address" placeholder="вул. Соборна 12, кв. 4">
+        </div>
+        <div>
+          <label for="to-address">Адреса висадки</label>
+          <input id="to-address" placeholder="Vinohradská 25">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div>
+          <label for="name">Ім'я та прізвище</label>
+          <input id="name" required autocomplete="name">
+        </div>
+        <div>
+          <label for="phone">Телефон</label>
+          <input id="phone" type="tel" required autocomplete="tel" placeholder="+380 __ ___ __ __">
+        </div>
+        <div>
+          <label for="seats">Місць</label>
+          <input id="seats" type="number" min="1" max="8" value="1" required>
+        </div>
+      </div>
+
+      <div>
+        <label for="comment">Коментар</label>
+        <textarea id="comment" rows="2" placeholder="Багаж, дитяче крісло, зупинка по дорозі…"></textarea>
+      </div>
+
+      <div>
+        <button class="btn" type="submit" id="submit-btn">Забронювати</button>
+      </div>
+      <div id="booking-result"></div>
+    </form>
+  </div>
+</section>
+
+<footer id="contacts">
+  <div class="wrap footer-grid">
+    <div>
+      <h3 style="color:#fff">Телефони</h3>
+      <p><a href="tel:+380687297990">+380 68 729 79 90</a><br><span class="small">Україна</span></p>
+      <p><a href="tel:+420773954311">+420 773 954 311</a><br><span class="small">Чехія</span></p>
+    </div>
+    <div>
+      <h3 style="color:#fff">Онлайн</h3>
+      <p><a href="https://www.instagram.com/pereviznuk_uacz" target="_blank" rel="noreferrer">Instagram @pereviznuk_uacz</a></p>
+      <p id="bot-link-wrap"></p>
+    </div>
+    <div>
+      <h3 style="color:#fff">Графік виїздів</h3>
+      <p class="small">З України — вівторок, п'ятниця<br>З Чехії — четвер, неділя</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const state = { rides: [], routes: {} };
+
+const fmtDate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('uk-UA',
+  { weekday: 'short', day: 'numeric', month: 'long' });
+
+async function getJSON(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Помилка запиту');
+  return res.json();
+}
+
+function option(value, text) {
+  const o = document.createElement('option');
+  o.value = value;
+  o.textContent = text;
+  return o;
+}
+
+async function loadRides() {
+  const today = new Date().toISOString().slice(0, 10);
+  const rides = (await getJSON('/api/rides'))
+    .filter((r) => r.status === 'active' && r.seats_free > 0 && r.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  state.rides = rides;
+  const select = $('ride');
+  select.replaceChildren();
+
+  if (!rides.length) {
+    $('ride-hint').textContent = 'Найближчих рейсів поки немає — зателефонуйте нам.';
+    $('submit-btn').disabled = true;
+    return;
+  }
+
+  for (const ride of rides) {
+    const price = ride.price ? ` · ${ride.price} грн` : '';
+    select.append(option(ride.id, `${fmtDate(ride.date)} · ${ride.route.name} · ${ride.seats_free} місць${price}`));
+  }
+  $('ride-hint').textContent = 'Не знайшли зручну дату? Зателефонуйте — можливо, додамо виїзд.';
+  select.onchange = () => loadStops(Number(select.value));
+  await loadStops(rides[0].id);
+}
+
+async function loadStops(rideId) {
+  const ride = state.rides.find((r) => r.id === rideId);
+  if (!ride) return;
+  if (!state.routes[ride.route_id]) {
+    state.routes[ride.route_id] = await getJSON(`/api/routes/${ride.route_id}`);
+  }
+  const stops = state.routes[ride.route_id].stops;
+
+  const from = $('from-stop'), to = $('to-stop');
+  from.replaceChildren(...stops.filter((s) => s.pickup).map((s) => option(s.id, `${s.city} (${s.country})`)));
+  to.replaceChildren(...stops.filter((s) => s.dropoff).map((s) => option(s.id, `${s.city} (${s.country})`)));
+}
+
+$('booking-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const result = $('booking-result');
+  const button = $('submit-btn');
+  result.className = '';
+  result.textContent = '';
+  button.disabled = true;
+
+  const payload = {
+    ride_id: Number($('ride').value),
+    name: $('name').value.trim(),
+    phone: $('phone').value.trim(),
+    seats: Number($('seats').value),
+    from_stop_id: Number($('from-stop').value),
+    to_stop_id: Number($('to-stop').value),
+    from_address: $('from-address').value.trim() || null,
+    to_address: $('to-address').value.trim() || null,
+    comment: $('comment').value.trim() || null,
+    source: 'web',
+  };
+
+  try {
+    const res = await fetch('/api/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Не вдалося зберегти бронювання');
+    const booking = await res.json();
+
+    result.className = 'note ok';
+    result.textContent = `Бронювання №${booking.id} прийнято. Ми зателефонуємо для підтвердження. `
+      + 'Щоб отримувати нагадування про виїзд — напишіть нашому Telegram-боту з цього ж номера.';
+    $('booking-form').reset();
+    await loadRides();
+  } catch (e) {
+    result.className = 'note err';
+    result.textContent = e.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+
+const STATUS_TEXT = {
+  accepted: 'прийнято, очікує відправлення',
+  in_transit: 'у дорозі',
+  border_crossed: 'перетнула кордон',
+  out_for_delivery: 'сьогодні доставка',
+  delivered: 'доставлено',
+};
+
+async function trackParcel() {
+  const box = $('track-result');
+  const number = $('track-input').value.trim().toUpperCase();
+  if (!number) return;
+  box.className = 'hint';
+  box.textContent = 'Шукаємо…';
+  try {
+    const parcel = await getJSON(`/api/parcels/track/${encodeURIComponent(number)}`);
+    box.className = 'note ok';
+    box.textContent = `${parcel.tracking_number}: ${STATUS_TEXT[parcel.status] || parcel.status}`;
+  } catch {
+    box.className = 'note err';
+    box.textContent = 'Посилку з таким номером не знайдено. Перевірте номер або зателефонуйте нам.';
+  }
+}
+
+$('track-btn').onclick = trackParcel;
+$('track-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') trackParcel(); });
+
+(async () => {
+  try {
+    const { bot_username } = await getJSON('/api/public/config');
+    if (bot_username) {
+      const link = document.createElement('a');
+      link.href = `https://t.me/${bot_username}`;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      link.textContent = `Telegram-бот @${bot_username}`;
+      $('bot-link-wrap').append(link);
+    }
+  } catch { /* the page works fine without a bot link */ }
+
+  try {
+    await loadRides();
+  } catch (e) {
+    $('ride-hint').textContent = 'Не вдалося завантажити рейси. Зателефонуйте нам, будь ласка.';
+    $('submit-btn').disabled = true;
+  }
+})();
+</script>
+</body>
+</html>

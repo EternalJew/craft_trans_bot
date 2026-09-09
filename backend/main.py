@@ -68,10 +68,20 @@ app.mount("/media", StaticFiles(directory=storage.MEDIA_ROOT), name="media")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 
+@app.get("/", include_in_schema=False)
+def landing():
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
 @app.get("/driver", include_in_schema=False)
 def driver_app():
     """Telegram Mini App the drivers open from the bot."""
     return FileResponse(os.path.join(STATIC_DIR, "driver.html"))
+
+
+@app.get("/api/public/config")
+def public_config():
+    return {"bot_username": os.getenv("BOT_USERNAME", "")}
 
 
 @app.post("/auth/token", response_model=schemas.Token)
