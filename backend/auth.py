@@ -139,3 +139,18 @@ def verify_bot_key(x_bot_key: Optional[str] = Security(api_key_header)) -> bool:
     if x_bot_key == BOT_API_KEY:
         return True
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid bot API key")
+
+
+async def require_staff_or_bot(
+    x_bot_key: Optional[str] = Security(api_key_header),
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> Optional[models.User]:
+    """Guards customer data: reachable by the bot or by a logged-in staff member.
+
+    These endpoints carry names, phones and home addresses, and the API is
+    exposed to the internet by the public landing page.
+    """
+    if x_bot_key and hmac.compare_digest(x_bot_key, BOT_API_KEY):
+        return None
+    return await get_current_user(token, db)

@@ -8,6 +8,7 @@ const links = [
   { to: '/driver-map',    label: 'Навігація',      icon: '🧭' },
   { to: '/profitability', label: 'Рентабельність', icon: '💰' },
   { to: '/vehicles',      label: 'Автопарк',       icon: '🚐' },
+  { to: '/drivers',       label: 'Водії',          icon: '🧑‍✈️' },
 ]
 
 export default function Layout() {

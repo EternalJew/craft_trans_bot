@@ -4,7 +4,7 @@ from typing import List, Optional
 import models
 import schemas
 from database import get_db
-from auth import get_current_user
+from auth import require_staff_or_bot
 
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 
@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 def list_bookings(
     phone: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    _=Depends(require_staff_or_bot),
 ):
     q = db.query(models.Booking)
     if phone:
@@ -56,6 +57,7 @@ def update_booking(
     booking_id: int,
     body: schemas.BookingUpdate,
     db: Session = Depends(get_db),
+    _=Depends(require_staff_or_bot),
 ):
     booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
     if not booking:
@@ -84,7 +86,11 @@ def update_booking(
 
 
 @router.delete("/{booking_id}")
-def cancel_booking(booking_id: int, db: Session = Depends(get_db)):
+def cancel_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_staff_or_bot),
+):
     booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")

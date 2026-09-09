@@ -751,8 +751,7 @@ async def track_lookup(message: types.Message, state: FSMContext):
         f"Посилка {parcel['tracking_number']}\n\n"
         f"Статус: {PARCEL_STATUS_LABELS.get(parcel['status'], parcel['status'])}\n"
         f"Напрямок: {parcel['direction']}\n"
-        f"Отримувач: {parcel['receiver']}\n"
-        f"Доставка: {parcel.get('receiver_address') or parcel.get('np_office') or '—'}"
+        f"Прийнято: {parcel['created_at'][:10]}"
     )
     await state.clear()
 

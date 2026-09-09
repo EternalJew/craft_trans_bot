@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 import models, schemas, notify, storage
 from database import get_db
-from auth import require_admin, require_driver
+from auth import require_admin, require_driver, require_staff_or_bot
 
 router = APIRouter(prefix="/api/parcels", tags=["parcels"])
 
@@ -23,6 +23,7 @@ def list_parcels(
     status: Optional[str] = Query(None),
     phone: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    _=Depends(require_staff_or_bot),
 ):
     q = db.query(models.Parcel)
     if status:
@@ -64,7 +65,7 @@ def create_parcel(body: schemas.ParcelCreate, db: Session = Depends(get_db)):
     return parcel
 
 
-@router.get("/track/{tracking_number}", response_model=schemas.ParcelOut)
+@router.get("/track/{tracking_number}", response_model=schemas.ParcelTrackOut)
 def track(tracking_number: str, db: Session = Depends(get_db)):
     parcel = (
         db.query(models.Parcel)
@@ -77,7 +78,7 @@ def track(tracking_number: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{parcel_id}", response_model=schemas.ParcelOut)
-def get_parcel(parcel_id: int, db: Session = Depends(get_db)):
+def get_parcel(parcel_id: int, db: Session = Depends(get_db), _=Depends(require_staff_or_bot)):
     return _get(db, parcel_id)
 
 
@@ -87,6 +88,7 @@ def add_photo(
     kind: str = Query("intake", pattern="^(intake|delivery)$"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _=Depends(require_staff_or_bot),
 ):
     parcel = _get(db, parcel_id)
     photo = models.ParcelPhoto(

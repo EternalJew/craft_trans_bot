@@ -1,27 +1,37 @@
 import { useEffect, useState } from 'react'
-import { getRides, getRoutes, createRide, deleteRide } from '../api'
+import { getRides, getRoutes, createRide, deleteRide, getUsers, assignDriver } from '../api'
 
 const EMPTY_FORM = {
   route_id: '',
   date: '',
+  departure_time: '',
   seats_total: 8,
   vehicle: '',
-  driver: '',
+  driver_id: '',
   price: '',
+}
+
+const STATUS_LABELS = {
+  active:      { label: 'Активний',  color: 'bg-green-100 text-green-700' },
+  in_progress: { label: 'В дорозі',  color: 'bg-blue-100 text-blue-700' },
+  completed:   { label: 'Завершено', color: 'bg-gray-100 text-gray-600' },
+  cancelled:   { label: 'Скасований', color: 'bg-red-100 text-red-500' },
 }
 
 export default function RidesPage() {
   const [rides, setRides]       = useState([])
   const [routes, setRoutes]     = useState([])
+  const [drivers, setDrivers]   = useState([])
   const [showForm, setShowForm] = useState(false)
   const [form, setForm]         = useState(EMPTY_FORM)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
 
   const load = async () => {
-    const [ridesRes, routesRes] = await Promise.all([getRides(), getRoutes()])
+    const [ridesRes, routesRes, usersRes] = await Promise.all([getRides(), getRoutes(), getUsers()])
     setRides(ridesRes.data)
     setRoutes(routesRes.data)
+    setDrivers(usersRes.data.filter((u) => u.role === 'driver'))
   }
 
   useEffect(() => { load() }, [])
@@ -31,12 +41,15 @@ export default function RidesPage() {
     setError('')
     setLoading(true)
     try {
-      await createRide({
-        ...form,
+      const { driver_id, ...rideData } = form
+      const { data: ride } = await createRide({
+        ...rideData,
         route_id: Number(form.route_id),
         seats_total: Number(form.seats_total),
+        departure_time: form.departure_time || null,
         price: form.price ? Number(form.price) : null,
       })
+      if (driver_id) await assignDriver(ride.id, Number(driver_id))
       setShowForm(false)
       setForm(EMPTY_FORM)
       load()
@@ -47,16 +60,16 @@ export default function RidesPage() {
     }
   }
 
+  const handleDriverChange = async (rideId, driverId) => {
+    await assignDriver(rideId, driverId ? Number(driverId) : null)
+    load()
+  }
+
   const handleDelete = async (id) => {
     if (!confirm('Видалити рейс? Всі бронювання також будуть видалені.')) return
     await deleteRide(id)
     load()
   }
-
-  const statusBadge = (status) =>
-    status === 'active'
-      ? 'bg-green-100 text-green-700'
-      : 'bg-red-100 text-red-500'
 
   const freePercent = (ride) =>
     Math.round(((ride.seats_total - ride.seats_free) / ride.seats_total) * 100)
@@ -99,13 +112,29 @@ export default function RidesPage() {
             {rides.map((r) => (
               <tr key={r.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-400">#{r.id}</td>
-                <td className="px-4 py-3 font-medium">{r.date}</td>
+                <td className="px-4 py-3">
+                  <div className="font-medium">{r.date}</div>
+                  {r.departure_time && (
+                    <div className="text-xs text-gray-400">виїзд {r.departure_time.slice(0, 5)}</div>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{r.route?.name}</div>
                   <div className="text-xs text-gray-400">{r.route?.direction}</div>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{r.vehicle || '—'}</td>
-                <td className="px-4 py-3 text-gray-600">{r.driver?.full_name || '—'}</td>
+                <td className="px-4 py-3">
+                  <select
+                    className="border rounded px-2 py-1 text-xs bg-white"
+                    value={r.driver_id || ''}
+                    onChange={(e) => handleDriverChange(r.id, e.target.value)}
+                  >
+                    <option value="">— не призначено —</option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>{d.full_name || d.username}</option>
+                    ))}
+                  </select>
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className="text-sm">
@@ -123,8 +152,8 @@ export default function RidesPage() {
                   {r.price ? `${r.price} грн` : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBadge(r.status)}`}>
-                    {r.status === 'active' ? 'Активний' : 'Скасований'}
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_LABELS[r.status]?.color}`}>
+                    {STATUS_LABELS[r.status]?.label || r.status}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -178,16 +207,27 @@ export default function RidesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Кількість місць</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Час виїзду</label>
                   <input
-                    type="number"
-                    min="1"
+                    type="time"
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={form.seats_total}
-                    onChange={(e) => setForm({ ...form, seats_total: e.target.value })}
-                    required
+                    value={form.departure_time}
+                    onChange={(e) => setForm({ ...form, departure_time: e.target.value })}
                   />
+                  <p className="text-xs text-gray-400 mt-1">Потрапить у нагадування пасажирам</p>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Кількість місць</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={form.seats_total}
+                  onChange={(e) => setForm({ ...form, seats_total: e.target.value })}
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -202,12 +242,16 @@ export default function RidesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Водій</label>
-                  <input
+                  <select
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="ПІБ водія"
-                    value={form.driver}
-                    onChange={(e) => setForm({ ...form, driver: e.target.value })}
-                  />
+                    value={form.driver_id}
+                    onChange={(e) => setForm({ ...form, driver_id: e.target.value })}
+                  >
+                    <option value="">— не призначено —</option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>{d.full_name || d.username}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

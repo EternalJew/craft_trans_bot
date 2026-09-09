@@ -175,6 +175,16 @@ class DriverParcelUpdate(BaseModel):
     status:         Optional[str] = None
     cash_collected: Optional[int] = None
 
+class ParcelTrackOut(BaseModel):
+    """Public tracking view — anyone holding the number can read it, so it
+    carries no names, phones or addresses."""
+    tracking_number: str
+    direction:       str
+    status:          str
+    created_at:      datetime
+    delivered_at:    Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
 class ParcelPhotoOut(BaseModel):
     id:        int
     parcel_id: int

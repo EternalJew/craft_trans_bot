@@ -43,6 +43,14 @@ export const getRides   = ()          => api.get('/api/rides')
 export const createRide = (data)      => api.post('/api/rides', data)
 export const deleteRide = (id)        => api.delete(`/api/rides/${id}`)
 export const getRideBookings = (id)   => api.get(`/api/rides/${id}/bookings`)
+export const assignDriver = (rideId, driverId) =>
+  api.patch(`/api/rides/${rideId}/assign-driver`, null, { params: driverId ? { driver_id: driverId } : {} })
+
+// ── Users / drivers ───────────────────────────────────────────────────────────
+export const getUsers   = ()          => api.get('/api/users')
+export const createUser = (data)      => api.post('/api/users', data)
+export const updateUser = (id, data)  => api.patch(`/api/users/${id}`, data)
+export const deleteUser = (id)        => api.delete(`/api/users/${id}`)
 
 // ── Bookings ──────────────────────────────────────────────────────────────────
 export const getBookings    = (phone) => api.get('/api/bookings', { params: phone ? { phone } : {} })

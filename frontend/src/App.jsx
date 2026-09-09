@@ -7,6 +7,7 @@ import ParcelsPage from './pages/Parcels'
 import DriverMapPage from './pages/DriverMap'
 import ProfitabilityPage from './pages/Profitability'
 import VehiclesPage from './pages/Vehicles'
+import DriversPage from './pages/Drivers'
 import Layout from './components/Layout'
 
 function RequireAuth({ children }) {
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="driver-map"    element={<DriverMapPage />} />
           <Route path="profitability" element={<ProfitabilityPage />} />
           <Route path="vehicles"      element={<VehiclesPage />} />
+          <Route path="drivers"       element={<DriversPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
