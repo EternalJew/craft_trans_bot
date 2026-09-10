@@ -2,11 +2,15 @@ import os
 import asyncio
 from datetime import date
 import httpx
-from aiogram import Bot, Dispatcher, types
+from html import escape as esc
+
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.filters.state import StateFilter
 from aiogram.types import (
-    BotCommand, BotCommandScopeDefault,
+    BotCommand, BotCommandScopeDefault, MenuButtonCommands,
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton,
 )
@@ -23,7 +27,14 @@ BOT_API_KEY    = os.getenv("BOT_API_KEY", "bot-secret-key")
 NOTIFY_POLL_SECONDS = int(os.getenv("NOTIFY_POLL_SECONDS", "20"))
 WEBAPP_URL     = os.getenv("WEBAPP_URL", "").rstrip("/")
 
-bot     = Bot(token=TELEGRAM_TOKEN)
+# parse_mode stays off by default: most messages interpolate names, addresses and
+# comments people typed, and a stray "<" would make Telegram reject the send.
+# Messages that want formatting pass parse_mode=HTML and escape what they embed.
+bot     = Bot(
+    token=TELEGRAM_TOKEN,
+    default=DefaultBotProperties(link_preview_is_disabled=True),
+)
+HTML = ParseMode.HTML
 storage = MemoryStorage()
 dp      = Dispatcher(storage=storage)
 
@@ -140,16 +151,27 @@ class TrackStates(StatesGroup):
 
 # ── Keyboards ─────────────────────────────────────────────────────────────────
 
+# Menu labels double as filters, so the buttons read like words rather than
+# slash commands while still routing to the same handlers.
+BTN_BOOK   = "🎫 Забронювати місце"
+BTN_RIDES  = "🗓 Найближчі рейси"
+BTN_PARCEL = "📦 Відправити посилку"
+BTN_TRACK  = "🔎 Де моя посилка"
+BTN_MINE   = "📋 Мої бронювання"
+BTN_FLEET  = "🚌 Наш автопарк"
+
+
 def public_kb():
-    return ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text='/rides')],
-        [KeyboardButton(text='/book')],
-        [KeyboardButton(text='/parcel')],
-        [KeyboardButton(text='/track')],
-        [KeyboardButton(text='/my_bookings')],
-        [KeyboardButton(text='/автопарк')],
-        [KeyboardButton(text='/help')],
-    ], resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_BOOK)],
+            [KeyboardButton(text=BTN_RIDES),  KeyboardButton(text=BTN_MINE)],
+            [KeyboardButton(text=BTN_PARCEL), KeyboardButton(text=BTN_TRACK)],
+            [KeyboardButton(text=BTN_FLEET)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Оберіть дію або напишіть /help",
+    )
 
 
 def phone_kb():
@@ -177,22 +199,32 @@ async def link_contact(phone: str, tg_user: types.User):
 @dp.message(Command("start", "help"))
 async def cmd_help(message: types.Message):
     await message.answer(
-        "Вітаємо у CraftTrans!\n\n"
-        "/rides — переглянути рейси\n"
-        "/book — забронювати місце\n"
-        "/parcel — відправити посилку\n"
-        "/track — статус посилки за трек-номером\n"
-        "/my_bookings — мої бронювання\n"
-        "/cancel_booking — скасувати бронювання\n"
-        "/change_booking — змінити бронювання\n"
-        "/автопарк — наш транспорт",
-        reply_markup=public_kb()
+        "<b>craft plus</b> — пасажири та посилки Україна ⇄ Чехія\n"
+        "<i>Забираємо з-під дому й довозимо за адресою.</i>\n\n"
+        "🚐 З України — <b>вівторок</b> і <b>п'ятниця</b>\n"
+        "🚐 З Чехії — <b>четвер</b> і <b>неділя</b>\n\n"
+        "Оберіть дію на клавіатурі нижче.\n\n"
+        "<blockquote>Змінити чи скасувати бронювання: "
+        "/change_booking, /cancel_booking</blockquote>",
+        parse_mode=HTML,
+        reply_markup=public_kb(),
+    )
+
+
+@dp.message(Command("whoami"))
+async def cmd_whoami(message: types.Message):
+    """Setup helper: the id that goes into OWNER_TELEGRAM_IDS or a driver's account."""
+    await message.answer(
+        f"{esc(message.from_user.full_name)}\n"
+        f"Ваш Telegram id: <code>{message.from_user.id}</code>",
+        parse_mode=HTML,
     )
 
 
 # ── /rides ────────────────────────────────────────────────────────────────────
 
 @dp.message(Command("rides"))
+@dp.message(F.text == BTN_RIDES)
 async def cmd_rides(message: types.Message):
     try:
         rides = await api_get("/api/rides")
@@ -207,17 +239,23 @@ async def cmd_rides(message: types.Message):
 
     lines = []
     for r in active:
-        route_name = r.get("route", {}).get("name", "?")
+        route_name = esc(r.get("route", {}).get("name", "?"))
+        free = r["seats_free"]
+        mark = "🟢" if free > 2 else "🟠"
         lines.append(
-            f"🚐 {fmt_date(r['date'])} · {route_name}\n"
-            f"   Місць вільно: {r['seats_free']}/{r['seats_total']}"
+            f"{mark} <b>{fmt_date(r['date'])}</b> · {route_name}\n"
+            f"     вільно {free} з {r['seats_total']}"
         )
-    await message.answer("\n\n".join(lines))
+    await message.answer(
+        "<b>Найближчі рейси</b>\n\n" + "\n\n".join(lines),
+        parse_mode=HTML,
+    )
 
 
 # ── /book ─────────────────────────────────────────────────────────────────────
 
 @dp.message(Command("book"))
+@dp.message(F.text == BTN_BOOK)
 async def cmd_book(message: types.Message, state: FSMContext):
     try:
         rides = await api_get("/api/rides")
@@ -449,6 +487,7 @@ async def booking_comment(message: types.Message, state: FSMContext):
 # ── /my_bookings ──────────────────────────────────────────────────────────────
 
 @dp.message(Command("my_bookings"))
+@dp.message(F.text == BTN_MINE)
 async def cmd_my_bookings(message: types.Message, state: FSMContext):
     await state.set_state(ViewBookingStates.await_phone)
     await message.answer("Введіть ваш телефон для пошуку бронювань:")
@@ -603,6 +642,7 @@ async def change_new_comment(message: types.Message, state: FSMContext):
 # ── /parcel ───────────────────────────────────────────────────────────────────
 
 @dp.message(Command("parcel"))
+@dp.message(F.text == BTN_PARCEL)
 async def cmd_parcel(message: types.Message, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇺🇦 → 🇨🇿  Україна → Чехія", callback_data="parcel_dir:UA->CZ")],
@@ -764,6 +804,7 @@ async def parcel_no_photo(message: types.Message, state: FSMContext):
 # ── /track ────────────────────────────────────────────────────────────────────
 
 @dp.message(Command("track"))
+@dp.message(F.text == BTN_TRACK)
 async def cmd_track(message: types.Message, state: FSMContext):
     await state.set_state(TrackStates.await_number)
     await message.answer("Введіть трек-номер посилки (наприклад CT-7K4M2Q):")
@@ -802,9 +843,10 @@ async def cmd_driver(message: types.Message):
     await message.answer("Відкрийте маніфест на сьогодні:", reply_markup=kb)
 
 
-# ── /автопарк ─────────────────────────────────────────────────────────────────
+# ── /fleet ─────────────────────────────────────────────────────────────────
 
-@dp.message(Command("автопарк"))
+@dp.message(Command("fleet"))
+@dp.message(F.text == BTN_FLEET)
 async def cmd_fleet(message: types.Message):
     media_dir = os.path.join(os.path.dirname(__file__), '..', 'media')
     if not os.path.isdir(media_dir):
@@ -847,18 +889,34 @@ async def default_response(message: types.Message):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-async def set_commands():
+async def configure_bot():
+    """Commands, profile texts and the menu button — everything Telegram shows
+    around the conversation. /whoami and /driver stay unlisted on purpose."""
     await bot.set_my_commands([
-        BotCommand(command="rides",          description="Переглянути рейси"),
-        BotCommand(command="book",           description="Забронювати місце"),
-        BotCommand(command="parcel",         description="Відправити посилку"),
-        BotCommand(command="track",          description="Статус посилки"),
-        BotCommand(command="my_bookings",    description="Мої бронювання"),
-        BotCommand(command="cancel_booking", description="Скасувати бронювання"),
-        BotCommand(command="change_booking", description="Змінити бронювання"),
-        BotCommand(command="автопарк",       description="Наш транспорт"),
-        BotCommand(command="help",           description="Довідка"),
+        BotCommand(command="book",           description="🎫 Забронювати місце"),
+        BotCommand(command="rides",          description="🗓 Найближчі рейси"),
+        BotCommand(command="parcel",         description="📦 Відправити посилку"),
+        BotCommand(command="track",          description="🔎 Де моя посилка"),
+        BotCommand(command="my_bookings",    description="📋 Мої бронювання"),
+        BotCommand(command="change_booking", description="✏️ Змінити бронювання"),
+        BotCommand(command="cancel_booking", description="❌ Скасувати бронювання"),
+        BotCommand(command="fleet",          description="🚌 Наш автопарк"),
+        BotCommand(command="help",           description="ℹ️ Довідка"),
     ], scope=BotCommandScopeDefault())
+
+    # Shown in an empty chat, before the first message.
+    await bot.set_my_description(
+        "craft plus — пасажирські перевезення та посилки Україна ⇄ Чехія.\n\n"
+        "Забираємо з-під дому й довозимо за адресою. Мікроавтобуси на 8 місць.\n"
+        "З України: вівторок, п'ятниця. З Чехії: четвер, неділя.\n\n"
+        "Натисніть «Почати», щоб забронювати місце або відправити посилку."
+    )
+    # Shown under the bot name in its profile and in search.
+    await bot.set_my_short_description(
+        "Пасажири та посилки Україна ⇄ Чехія. Бронювання за хвилину."
+    )
+    await bot.set_my_name("craft plus")
+    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
 
 def notification_kb(note: dict):
@@ -915,7 +973,7 @@ async def deliver_notifications():
 
 
 async def main():
-    await set_commands()
+    await configure_bot()
     asyncio.create_task(deliver_notifications())
     await dp.start_polling(bot)
 
