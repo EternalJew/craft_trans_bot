@@ -20,11 +20,16 @@ def list_bookings(
     _=Depends(require_staff_or_bot),
 ):
     q = db.query(models.Booking)
-    if phone:
-        q = q.filter(models.Booking.phone == phone)
     if book_status:
         q = q.filter(models.Booking.book_status == book_status)
-    return q.order_by(models.Booking.created_at.desc()).all()
+    rows = q.order_by(models.Booking.created_at.desc()).all()
+
+    if phone:
+        # People write the same number as +380…, 380… or 0… — compare the part
+        # that is actually the same.
+        wanted = notify.normalize_phone(phone)
+        rows = [b for b in rows if notify.normalize_phone(b.phone) == wanted]
+    return rows
 
 
 @router.post("", response_model=schemas.BookingOut)

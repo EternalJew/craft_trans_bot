@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getBookQueue, getRides, markWrittenInBook } from '../api'
+import { getBookQueue, getRides, markWrittenInBook, searchBookings } from '../api'
 
 const SOURCE_LABELS = {
   web:    { label: 'Сайт',    color: 'bg-blue-100 text-blue-700' },
@@ -17,6 +17,8 @@ export default function BookQueuePage() {
   const [bookings, setBookings] = useState([])
   const [rides, setRides]       = useState({})
   const [loading, setLoading]   = useState(true)
+  const [phone, setPhone]       = useState('')
+  const [found, setFound]       = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -31,9 +33,17 @@ export default function BookQueuePage() {
 
   useEffect(() => { load() }, [])
 
+  const search = async (e) => {
+    e.preventDefault()
+    if (!phone.trim()) { setFound(null); return }
+    const res = await searchBookings(phone.trim())
+    setFound(res.data)
+  }
+
   const markWritten = async (id) => {
     await markWrittenInBook(id)
     setBookings((prev) => prev.filter((b) => b.id !== id))
+    setFound((prev) => prev && prev.map((b) => (b.id === id ? { ...b, book_status: 'written' } : b)))
   }
 
   return (
@@ -47,6 +57,33 @@ export default function BookQueuePage() {
         Той самий список приходить власнику в Telegram — тут видно, що він уже підтвердив.
       </p>
 
+      <form onSubmit={search} className="flex gap-2 mb-8 max-w-md">
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Знайти за телефоном, напр. 0501234567"
+          className="flex-1 border rounded-lg px-3 py-2"
+        />
+        <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 rounded-lg">Знайти</button>
+        {found && (
+          <button type="button" onClick={() => { setFound(null); setPhone('') }}
+                  className="text-sm text-gray-500 px-2">Скинути</button>
+        )}
+      </form>
+
+      {found && (
+        <div className="mb-8">
+          <h2 className="font-semibold mb-3">
+            {found.length ? `Знайдено: ${found.length}` : 'За цим номером нічого немає'}
+          </h2>
+          <div className="space-y-3">
+            {found.map((b) => (
+              <Card key={b.id} b={b} ride={rides[b.ride_id]} onWritten={markWritten} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading && <div className="text-gray-500">Завантаження…</div>}
 
       {!loading && bookings.length === 0 && (
@@ -56,45 +93,52 @@ export default function BookQueuePage() {
       )}
 
       <div className="space-y-3">
-        {bookings.map((b) => {
-          const ride = rides[b.ride_id]
-          const source = SOURCE_LABELS[b.source] || { label: b.source, color: 'bg-gray-100 text-gray-600' }
-          return (
-            <div key={b.id} className="bg-white rounded-lg shadow-sm p-4 flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${source.color}`}>{source.label}</span>
-                  <span className="text-xs text-gray-400">
-                    №{b.id} · прийнято {fmtTaken(b.created_at)}
-                  </span>
-                </div>
-                <div className="font-semibold mt-1">
-                  {ride ? `${fmtDate(ride.date)} · ${ride.route.name}` : `Рейс #${b.ride_id}`}
-                </div>
-                <div className="text-gray-800">
-                  {b.name} — <a href={`tel:${b.phone}`} className="text-blue-700">{b.phone}</a>
-                </div>
-                <div className="text-gray-600">
-                  {b.from_city} → {b.to_city} · {b.seats} місць
-                </div>
-                {(b.from_address || b.to_address) && (
-                  <div className="text-sm text-gray-500 mt-1">
-                    {b.from_address && <>Подача: {b.from_address}. </>}
-                    {b.to_address && <>Висадка: {b.to_address}.</>}
-                  </div>
-                )}
-                {b.comment && <div className="text-sm text-gray-500 italic mt-1">{b.comment}</div>}
-              </div>
-              <button
-                onClick={() => markWritten(b.id)}
-                className="shrink-0 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg"
-              >
-                Записано
-              </button>
-            </div>
-          )
-        })}
+        {bookings.map((b) => (
+          <Card key={b.id} b={b} ride={rides[b.ride_id]} onWritten={markWritten} />
+        ))}
       </div>
+    </div>
+  )
+}
+
+function Card({ b, ride, onWritten }) {
+  const source = SOURCE_LABELS[b.source] || { label: b.source, color: 'bg-gray-100 text-gray-600' }
+  const written = b.book_status === 'written'
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-4 flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-xs px-2 py-0.5 rounded-full ${source.color}`}>{source.label}</span>
+          <span className="text-xs text-gray-400">№{b.id} · прийнято {fmtTaken(b.created_at)}</span>
+          {b.status !== 'confirmed' && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">{b.status}</span>
+          )}
+        </div>
+        <div className="font-semibold mt-1">
+          {ride ? `${fmtDate(ride.date)} · ${ride.route.name}` : `Рейс #${b.ride_id}`}
+        </div>
+        <div className="text-gray-800">
+          {b.name} — <a href={`tel:${b.phone}`} className="text-blue-700">{b.phone}</a>
+        </div>
+        <div className="text-gray-600">{b.from_city} → {b.to_city} · {b.seats} місць</div>
+        {(b.from_address || b.to_address) && (
+          <div className="text-sm text-gray-500 mt-1">
+            {b.from_address && <>Подача: {b.from_address}. </>}
+            {b.to_address && <>Висадка: {b.to_address}.</>}
+          </div>
+        )}
+        {b.comment && <div className="text-sm text-gray-500 italic mt-1">{b.comment}</div>}
+      </div>
+      {written ? (
+        <span className="shrink-0 text-sm text-green-700 px-2 py-2">✅ У книжці</span>
+      ) : (
+        <button
+          onClick={() => onWritten(b.id)}
+          className="shrink-0 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg"
+        >
+          Записано
+        </button>
+      )}
     </div>
   )
 }

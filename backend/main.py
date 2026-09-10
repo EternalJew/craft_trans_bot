@@ -17,6 +17,7 @@ import models
 import schemas
 import migrate
 import notify
+import schedule
 import storage
 from auth import authenticate_user, create_access_token
 from routers import routes, rides, bookings, parcels, users, driver, vehicles, notifications
@@ -39,16 +40,29 @@ def queue_day_before_reminders():
         db.close()
 
 
+def top_up_schedule():
+    """Departures repeat weekly, so rides are generated rather than entered."""
+    db = SessionLocal()
+    try:
+        created = schedule.ensure_upcoming_rides(db)
+        if created:
+            print(f"Scheduled {created} upcoming rides")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "Europe/Kyiv"))
     scheduler.add_job(queue_day_before_reminders, "cron", hour=REMINDER_HOUR, minute=0)
+    scheduler.add_job(top_up_schedule, "cron", hour=3, minute=0)
     scheduler.start()
+    top_up_schedule()
     yield
     scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="CraftTrans API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="craft plus API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

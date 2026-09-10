@@ -1,15 +1,10 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 const links = [
-  { to: '/book-queue', label: 'На запис',   icon: '📓' },
-  { to: '/routes',     label: 'Маршрути',   icon: '🗺️' },
-  { to: '/rides',      label: 'Рейси',      icon: '🚐' },
-  { to: '/bookings',   label: 'Бронювання', icon: '🎫' },
-  { to: '/parcels',    label: 'Посилки',    icon: '📦' },
-  { to: '/driver-map',    label: 'Навігація',      icon: '🧭' },
-  { to: '/profitability', label: 'Рентабельність', icon: '💰' },
-  { to: '/vehicles',      label: 'Автопарк',       icon: '🚐' },
-  { to: '/drivers',       label: 'Водії',          icon: '🧑‍✈️' },
+  { to: '/book-queue', label: 'На запис',  icon: '📓' },
+  { to: '/parcels',    label: 'Посилки',   icon: '📦' },
+  { to: '/vehicles',   label: 'Автопарк',  icon: '🚐' },
+  { to: '/drivers',    label: 'Водії',     icon: '🧑‍✈️' },
 ]
 
 export default function Layout() {
@@ -25,7 +20,7 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-56 bg-blue-700 text-white flex flex-col">
         <div className="px-5 py-4 text-xl font-bold border-b border-blue-600">
-          CraftTrans
+          craft plus
         </div>
         <nav className="flex-1 py-4">
           {links.map(({ to, label, icon }) => (

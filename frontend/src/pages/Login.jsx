@@ -27,7 +27,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-blue-700">
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-center text-blue-700 mb-1">CraftTrans</h1>
+        <h1 className="text-2xl font-bold text-center text-blue-700 mb-1">craft plus</h1>
         <p className="text-center text-gray-500 text-sm mb-6">Панель управління</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

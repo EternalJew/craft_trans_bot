@@ -237,17 +237,15 @@ async def cmd_rides(message: types.Message):
         await message.answer("Наразі немає доступних рейсів")
         return
 
-    lines = []
-    for r in active:
-        route_name = esc(r.get("route", {}).get("name", "?"))
-        free = r["seats_free"]
-        mark = "🟢" if free > 2 else "🟠"
-        lines.append(
-            f"{mark} <b>{fmt_date(r['date'])}</b> · {route_name}\n"
-            f"     вільно {free} з {r['seats_total']}"
-        )
+    # No seat counts: the paper book holds passengers this database never sees,
+    # so any number shown here would be a promise we cannot keep.
+    lines = [
+        f"🚐 <b>{fmt_date(r['date'])}</b> · {esc(r.get('route', {}).get('name', '?'))}"
+        for r in active[:12]
+    ]
     await message.answer(
-        "<b>Найближчі рейси</b>\n\n" + "\n\n".join(lines),
+        "<b>Найближчі виїзди</b>\n\n" + "\n".join(lines) +
+        "\n\n<i>Місце підтверджуємо дзвінком.</i>",
         parse_mode=HTML,
     )
 
