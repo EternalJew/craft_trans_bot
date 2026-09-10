@@ -66,6 +66,7 @@ os.makedirs(storage.PARCEL_PHOTO_DIR, exist_ok=True)
 app.mount("/media", StaticFiles(directory=storage.MEDIA_ROOT), name="media")
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
