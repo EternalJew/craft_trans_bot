@@ -29,3 +29,20 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  # Public HTTPS tunnel. Off by default — it puts the whole stack, /admin
+  # included, on the open internet. Start it deliberately:
+  #   docker compose --profile tunnel up -d ngrok
+  ngrok:
+    image: ngrok/ngrok:latest
+    profiles: ["tunnel"]
+    command: start --all --config /etc/ngrok.yml
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml:ro
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    ports:
+      - "4040:4040"   # ngrok's own inspector, and the API tunnel.sh reads
+    depends_on:
+      - web
+    restart: unless-stopped

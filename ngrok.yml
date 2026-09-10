@@ -1,0 +1,10 @@
+version: "2"
+
+# 0.0.0.0 so the inspector and local API are reachable from the host,
+# not just from inside the container.
+web_addr: 0.0.0.0:4040
+
+tunnels:
+  craftplus:
+    proto: http
+    addr: web:80
