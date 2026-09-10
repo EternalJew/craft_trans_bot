@@ -861,6 +861,31 @@ async def set_commands():
     ], scope=BotCommandScopeDefault())
 
 
+def notification_kb(note: dict):
+    """Some notifications carry an action; most are just text."""
+    if note.get("kind") == "book_entry" and note.get("entity_id"):
+        return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+            text="✅ Записав у книжку",
+            callback_data=f"book_written:{note['entity_id']}",
+        )]])
+    return None
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("book_written:"))
+async def mark_book_written(callback: types.CallbackQuery):
+    booking_id = int(callback.data.split(":", 1)[1])
+    try:
+        await api_patch(f"/api/bookings/{booking_id}/book", {})
+    except Exception:
+        await callback.answer("Не вдалося зберегти. Спробуйте ще раз.", show_alert=True)
+        return
+
+    # Keep the details, drop the button, and show it is done.
+    text = callback.message.text.replace("ЗАПИСАТИ В КНИЖКУ", "✅ ЗАПИСАНО В КНИЖКУ", 1)
+    await callback.message.edit_text(text)
+    await callback.answer("Позначено як записане")
+
+
 async def deliver_notifications():
     """Poll the API outbox and deliver queued messages to passengers."""
     while True:
@@ -872,7 +897,11 @@ async def deliver_notifications():
 
         for note in pending:
             try:
-                await bot.send_message(chat_id=note["telegram_id"], text=note["text"])
+                await bot.send_message(
+                    chat_id=note["telegram_id"],
+                    text=note["text"],
+                    reply_markup=notification_kb(note),
+                )
                 ack = {"status": "sent"}
             except Exception as e:
                 ack = {"status": "failed", "error": str(e)[:500]}

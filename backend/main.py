@@ -15,6 +15,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 from database import engine, get_db, SessionLocal
 import models
 import schemas
+import migrate
 import notify
 import storage
 from auth import authenticate_user, create_access_token
@@ -22,6 +23,10 @@ from routers import routes, rides, bookings, parcels, users, driver, vehicles, n
 
 # Create all tables on startup
 models.Base.metadata.create_all(bind=engine)
+
+added = migrate.run(engine)
+if added:
+    print("Added columns:", ", ".join(added))
 
 REMINDER_HOUR = int(os.getenv("REMINDER_HOUR", "10"))
 

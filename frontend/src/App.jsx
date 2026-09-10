@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
+import BookQueuePage from './pages/BookQueue'
 import RoutesPage from './pages/Routes'
 import RidesPage from './pages/Rides'
 import BookingsPage from './pages/Bookings'
@@ -28,7 +29,8 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route index element={<Navigate to="/routes" replace />} />
+          <Route index element={<Navigate to="/book-queue" replace />} />
+          <Route path="book-queue" element={<BookQueuePage />} />
           <Route path="routes"   element={<RoutesPage />} />
           <Route path="rides"    element={<RidesPage />} />
           <Route path="bookings" element={<BookingsPage />} />

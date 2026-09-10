@@ -57,6 +57,8 @@ export const getBookings    = (phone) => api.get('/api/bookings', { params: phon
 export const createBooking  = (data)  => api.post('/api/bookings', data)
 export const updateBooking  = (id, data) => api.patch(`/api/bookings/${id}`, data)
 export const cancelBooking  = (id)    => api.delete(`/api/bookings/${id}`)
+export const getBookQueue   = ()      => api.get('/api/bookings', { params: { book_status: 'pending' } })
+export const markWrittenInBook = (id) => api.patch(`/api/bookings/${id}/book`)
 
 // ── Parcels ───────────────────────────────────────────────────────────────────
 export const getParcels     = (params) => api.get('/api/parcels', { params })

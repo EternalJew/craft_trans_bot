@@ -3,6 +3,7 @@
 The API never talks to Telegram directly — it writes rows into the
 ``notifications`` outbox and the bot process delivers them.
 """
+import os
 import re
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -29,10 +30,61 @@ def resolve_telegram_id(db: Session, booking: models.Booking) -> Optional[int]:
     return contact.telegram_id if contact else None
 
 
-def enqueue(db: Session, telegram_id: int, text: str, kind: str) -> models.Notification:
-    note = models.Notification(telegram_id=telegram_id, text=text, kind=kind)
+def enqueue(db: Session, telegram_id: int, text: str, kind: str,
+            entity_id: Optional[int] = None) -> models.Notification:
+    note = models.Notification(telegram_id=telegram_id, text=text, kind=kind, entity_id=entity_id)
     db.add(note)
     return note
+
+
+def owner_telegram_ids() -> list[int]:
+    """Whoever keeps the paper book, plus anyone who should see the same queue."""
+    raw = os.getenv("OWNER_TELEGRAM_IDS", "")
+    return [int(part) for part in re.split(r"[,\s]+", raw) if part.strip().lstrip("-").isdigit()]
+
+
+SOURCE_LABELS = {
+    "web":    "сайт",
+    "bot":    "Telegram-бот",
+    "admin":  "дзвінок",
+    "driver": "водій",
+}
+
+
+def book_entry_text(booking: models.Booking, ride: models.Ride) -> str:
+    """What the owner needs in front of him to copy a booking into the book."""
+    when = ride.date.strftime("%d.%m")
+    weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"][ride.date.weekday()]
+    lines = [
+        "ЗАПИСАТИ В КНИЖКУ",
+        "",
+        f"{weekday}, {when} · {ride.route.name}",
+        f"{booking.name} — {booking.phone}",
+        f"{booking.from_city} → {booking.to_city}",
+        f"Місць: {booking.seats}",
+    ]
+    if booking.from_address:
+        lines.append(f"Подача: {booking.from_address}")
+    if booking.to_address:
+        lines.append(f"Висадка: {booking.to_address}")
+    if booking.comment:
+        lines.append(f"Коментар: {booking.comment}")
+    lines.append("")
+    lines.append(f"Джерело: {SOURCE_LABELS.get(booking.source, booking.source)} · №{booking.id}")
+    return "\n".join(lines)
+
+
+def notify_owner_new_booking(db: Session, booking: models.Booking) -> int:
+    """Every booking, whatever channel it came from, lands in the owner's Telegram."""
+    ride = db.query(models.Ride).filter(models.Ride.id == booking.ride_id).first()
+    if not ride:
+        return 0
+    text = book_entry_text(booking, ride)
+    queued = 0
+    for telegram_id in owner_telegram_ids():
+        enqueue(db, telegram_id, text, "book_entry", entity_id=booking.id)
+        queued += 1
+    return queued
 
 
 def _fmt_time(value) -> Optional[str]:

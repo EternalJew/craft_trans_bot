@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from datetime import datetime
+
 import models
+import notify
 import schemas
 from database import get_db
 from auth import require_staff_or_bot
@@ -12,12 +15,15 @@ router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 @router.get("", response_model=List[schemas.BookingOut])
 def list_bookings(
     phone: Optional[str] = Query(None),
+    book_status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _=Depends(require_staff_or_bot),
 ):
     q = db.query(models.Booking)
     if phone:
         q = q.filter(models.Booking.phone == phone)
+    if book_status:
+        q = q.filter(models.Booking.book_status == book_status)
     return q.order_by(models.Booking.created_at.desc()).all()
 
 
@@ -47,6 +53,8 @@ def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
     )
     db.add(booking)
     ride.seats_free -= body.seats
+    db.flush()
+    notify.notify_owner_new_booking(db, booking)
     db.commit()
     db.refresh(booking)
     return booking
@@ -80,6 +88,24 @@ def update_booking(
     if body.pickup_time is not None:
         booking.pickup_time = body.pickup_time
 
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+
+@router.patch("/{booking_id}/book", response_model=schemas.BookingOut)
+def mark_written_in_book(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_staff_or_bot),
+):
+    """The owner confirms this booking is now in the paper book."""
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    booking.book_status = "written"
+    booking.book_written_at = datetime.utcnow()
     db.commit()
     db.refresh(booking)
     return booking

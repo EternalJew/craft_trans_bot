@@ -86,6 +86,11 @@ class Booking(Base):
     created_at   = Column(DateTime, default=datetime.utcnow)
     status       = Column(String, default="confirmed")
 
+    # The paper book is still the source of truth: every booking taken online
+    # waits here until the owner confirms he has copied it in.
+    book_status     = Column(String, default="pending", index=True)  # pending | written
+    book_written_at = Column(DateTime, nullable=True)
+
     reminded_day_before = Column(Boolean, default=False)
     reminded_departure  = Column(Boolean, default=False)
 
@@ -137,7 +142,8 @@ class Notification(Base):
     id          = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(Integer, nullable=False, index=True)
     text        = Column(Text, nullable=False)
-    kind        = Column(String, nullable=False)  # day_before | departure | parcel_status
+    kind        = Column(String, nullable=False)  # day_before | departure | parcel_status | book_entry
+    entity_id   = Column(Integer, nullable=True)  # what the message's action button acts on
     status      = Column(String, default="pending", index=True)  # pending | sent | failed
     created_at  = Column(DateTime, default=datetime.utcnow)
     sent_at     = Column(DateTime, nullable=True)

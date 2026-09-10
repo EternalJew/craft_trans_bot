@@ -137,6 +137,8 @@ class BookingOut(BookingBase):
     created_at:  datetime
     status:      str
     source:      str
+    book_status:     str = "pending"
+    book_written_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
 
 
@@ -248,6 +250,7 @@ class NotificationOut(BaseModel):
     telegram_id: int
     text:        str
     kind:        str
+    entity_id:   Optional[int] = None
     status:      str
     created_at:  datetime
     model_config = {"from_attributes": True}
