@@ -5,9 +5,14 @@ const fmtDate = (iso) =>
   new Date(iso + 'T00:00:00').toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'long' })
 
 const EMPTY = {
-  ride_id: '', from_city: '', to_city: '', name: '', phone: '',
+  direction: 'UA->CZ', ride_id: '', from_city: '', to_city: '', name: '', phone: '',
   seats: 1, from_address: '', to_address: '', comment: '',
 }
+
+const DIRECTIONS = [
+  { value: 'UA->CZ', label: '🇺🇦 → 🇨🇿  Україна → Чехія' },
+  { value: 'CZ->UA', label: '🇨🇿 → 🇺🇦  Чехія → Україна' },
+]
 
 // Typing in a booking taken over the phone. It goes down the same path as a
 // website booking: into the queue, and to the owner's Telegram to be copied
@@ -19,13 +24,17 @@ export default function CallForm({ rides, onSaved }) {
   const [note, setNote]     = useState(null)
 
   const today = new Date().toISOString().slice(0, 10)
+  // Direction first, then the dates that direction actually runs on — so the
+  // nearest departure the other way is never quietly preselected.
   const upcoming = rides
-    .filter((r) => r.status === 'active' && r.date >= today)
+    .filter((r) => r.status === 'active' && r.date >= today && r.route.direction === form.direction)
     .sort((a, b) => a.date.localeCompare(b.date))
 
   useEffect(() => {
-    if (!form.ride_id && upcoming.length) set('ride_id', upcoming[0].id)
-  }, [upcoming.length])
+    if (upcoming.length && !upcoming.some((r) => String(r.id) === String(form.ride_id))) {
+      set('ride_id', upcoming[0].id)
+    }
+  }, [form.direction, upcoming.length])
 
   useEffect(() => {
     const ride = upcoming.find((r) => String(r.id) === String(form.ride_id))
@@ -56,7 +65,7 @@ export default function CallForm({ rides, onSaved }) {
         source: 'admin',
       })
       setNote({ ok: true, text: `№${res.data.id} записано — батьку надіслано в Telegram.` })
-      setForm({ ...EMPTY, ride_id: form.ride_id })
+      setForm({ ...EMPTY, direction: form.direction, ride_id: form.ride_id })
       onSaved?.()
     } catch (err) {
       setNote({ ok: false, text: err.response?.data?.detail || 'Не вдалося зберегти' })
@@ -72,9 +81,12 @@ export default function CallForm({ rides, onSaved }) {
       <div className="font-semibold mb-3">📞 Записати дзвінок</div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <select value={form.ride_id} onChange={(e) => set('ride_id', e.target.value)} className={`${field} md:col-span-3`} required>
+        <select value={form.direction} onChange={(e) => set('direction', e.target.value)} className={field}>
+          {DIRECTIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
+        <select value={form.ride_id} onChange={(e) => set('ride_id', e.target.value)} className={`${field} md:col-span-2`} required>
           {upcoming.map((r) => (
-            <option key={r.id} value={r.id}>{fmtDate(r.date)} · {r.route.name}</option>
+            <option key={r.id} value={r.id}>{fmtDate(r.date)}</option>
           ))}
         </select>
 

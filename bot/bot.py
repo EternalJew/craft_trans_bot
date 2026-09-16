@@ -255,26 +255,48 @@ async def cmd_rides(message: types.Message):
 @dp.message(Command("book"))
 @dp.message(F.text == BTN_BOOK)
 async def cmd_book(message: types.Message, state: FSMContext):
+    # Direction first — a mixed list of dates gets people booking the nearest
+    # departure even when it goes the other way.
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇺🇦 → 🇨🇿  Україна → Чехія", callback_data="book_dir:UA->CZ")],
+        [InlineKeyboardButton(text="🇨🇿 → 🇺🇦  Чехія → Україна", callback_data="book_dir:CZ->UA")],
+    ])
+    await state.set_state(BookingStates.choosing_ride)
+    await message.answer("Куди їдете?", reply_markup=kb)
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("book_dir:"))
+async def book_select_direction(callback: types.CallbackQuery, state: FSMContext):
+    direction = callback.data.split(":", 1)[1]
     try:
         rides = await api_get("/api/rides")
     except Exception:
-        await message.answer("Не вдалося завантажити рейси")
+        await callback.message.answer("Не вдалося завантажити рейси")
+        await callback.answer()
         return
 
-    active = [r for r in rides if r["status"] == "active" and r["seats_free"] > 0]
+    today = date.today().isoformat()
+    active = sorted(
+        (r for r in rides
+         if r["status"] == "active" and r["seats_free"] > 0
+         and r["date"] >= today and r["route"]["direction"] == direction),
+        key=lambda r: r["date"],
+    )[:8]
     if not active:
-        await message.answer("Немає доступних рейсів для бронювання")
+        await callback.message.answer("У цей бік найближчих виїздів поки немає — зателефонуйте нам.")
+        await callback.answer()
         return
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=f"{fmt_date(r['date'])} · {r['route']['name']}",
-            callback_data=f"book_ride:{r['id']}"
-        )]
+        [InlineKeyboardButton(text=fmt_date(r["date"]), callback_data=f"book_ride:{r['id']}")]
         for r in active
     ])
-    await state.set_state(BookingStates.choosing_ride)
-    await message.answer("Оберіть рейс:", reply_markup=kb)
+    await callback.message.edit_text(
+        "<b>" + esc(active[0]["route"]["name"]) + "</b>\n"
+        "Оберіть дату виїзду:",
+        parse_mode=HTML, reply_markup=kb,
+    )
+    await callback.answer()
 
 
 @dp.callback_query(lambda c: c.data and c.data.startswith("book_ride:"))

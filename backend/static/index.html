@@ -488,11 +488,20 @@
         </p>
 
         <form id="booking-form" style="margin-top:28px">
-          <div>
-            <label for="ride">Рейс</label>
-            <select id="ride" required></select>
-            <div class="hint" id="ride-hint">Завантажуємо найближчі рейси…</div>
+          <div class="field-row">
+            <div>
+              <label for="direction">Напрямок</label>
+              <select id="direction">
+                <option value="UA->CZ">🇺🇦 → 🇨🇿 Україна → Чехія</option>
+                <option value="CZ->UA">🇨🇿 → 🇺🇦 Чехія → Україна</option>
+              </select>
+            </div>
+            <div>
+              <label for="ride">Дата виїзду</label>
+              <select id="ride" required></select>
+            </div>
           </div>
+          <div class="hint" id="ride-hint" style="margin-top:-6px">Завантажуємо найближчі рейси…</div>
 
           <div class="field-row">
             <div>
@@ -628,24 +637,31 @@ function option(value, text) {
 
 async function loadRides() {
   const today = new Date().toISOString().slice(0, 10);
-  const rides = (await getJSON('/api/rides'))
+  state.rides = (await getJSON('/api/rides'))
     .filter((r) => r.status === 'active' && r.seats_free > 0 && r.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date));
+  $('direction').onchange = showDates;
+  await showDates();
+}
 
-  state.rides = rides;
+// Direction first, then only the dates that direction runs on — otherwise the
+// nearest departure the other way gets preselected and people book against it.
+async function showDates() {
+  const rides = state.rides.filter((r) => r.route.direction === $('direction').value);
   const select = $('ride');
   select.replaceChildren();
 
   if (!rides.length) {
-    $('ride-hint').textContent = 'Найближчих рейсів поки немає — зателефонуйте нам.';
+    $('ride-hint').textContent = 'Найближчих рейсів у цей бік поки немає — зателефонуйте нам.';
     $('submit-btn').disabled = true;
     return;
   }
 
   for (const ride of rides) {
-    select.append(option(ride.id, `${fmtDate(ride.date)} · ${ride.route.name}`));
+    select.append(option(ride.id, fmtDate(ride.date)));
   }
   $('ride-hint').textContent = 'Не знайшли зручну дату? Зателефонуйте — можливо, додамо виїзд.';
+  $('submit-btn').disabled = false;
   select.onchange = () => loadCities(Number(select.value));
   await loadCities(rides[0].id);
 }

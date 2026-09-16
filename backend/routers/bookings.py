@@ -42,6 +42,25 @@ def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
     if ride.seats_free < body.seats:
         raise HTTPException(status_code=400, detail=f"Not enough seats. Available: {ride.seats_free}")
 
+    # Cities are free text, so a village we have never heard of passes. But a
+    # city we do know must be on the right end of this ride: boarding in
+    # Славута on a Чехія → Україна departure is a mistake, not a request.
+    pickups  = {s.city.casefold() for s in ride.route.stops if s.pickup}
+    dropoffs = {s.city.casefold() for s in ride.route.stops if s.dropoff}
+    from_key, to_key = body.from_city.strip().casefold(), body.to_city.strip().casefold()
+    if from_key in dropoffs and from_key not in pickups:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Рейс {ride.route.name}: посадка в {body.from_city.strip()} неможлива — "
+                   f"це місто прибуття. Оберіть інший напрямок.",
+        )
+    if to_key in pickups and to_key not in dropoffs:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Рейс {ride.route.name}: висадка в {body.to_city.strip()} неможлива — "
+                   f"це місто відправлення. Оберіть інший напрямок.",
+        )
+
     booking = models.Booking(
         ride_id=body.ride_id,
         name=body.name,
