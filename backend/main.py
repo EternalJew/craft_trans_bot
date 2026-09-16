@@ -20,7 +20,7 @@ import notify
 import schedule
 import storage
 from auth import authenticate_user, create_access_token
-from routers import routes, rides, bookings, parcels, users, driver, vehicles, notifications
+from routers import routes, rides, bookings, parcels, users, driver, vehicles, notifications, book
 
 # Create all tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -80,6 +80,7 @@ app.include_router(users.router)
 app.include_router(driver.router)
 app.include_router(vehicles.router)
 app.include_router(notifications.router)
+app.include_router(book.router)
 
 os.makedirs(storage.PARCEL_PHOTO_DIR, exist_ok=True)
 app.mount("/media", StaticFiles(directory=storage.MEDIA_ROOT), name="media")

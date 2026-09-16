@@ -48,6 +48,7 @@ SOURCE_LABELS = {
     "bot":    "Telegram-бот",
     "admin":  "дзвінок",
     "driver": "водій",
+    "book":   "зошит",
 }
 
 

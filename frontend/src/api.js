@@ -73,3 +73,11 @@ export const uploadParcelPhoto = (id, file, kind = 'intake') => {
   return api.post(`/api/parcels/${id}/photos`, form, { params: { kind } })
 }
 export const parcelPhotoUrl = (filename) => `/media/parcels/${filename}`
+
+// ── Paper book ────────────────────────────────────────────────────────────────
+export const scanBookPage = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post('/api/book/scan', form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 })
+}
+export const importBookPage = (data) => api.post('/api/book/import', data)

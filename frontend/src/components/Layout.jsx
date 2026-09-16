@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 const links = [
   { to: '/book-queue', label: 'На запис',  icon: '📓' },
+  { to: '/book-scan',  label: 'Зошит',     icon: '📷' },
   { to: '/parcels',    label: 'Посилки',   icon: '📦' },
   { to: '/vehicles',   label: 'Автопарк',  icon: '🚐' },
   { to: '/drivers',    label: 'Водії',     icon: '🧑‍✈️' },
