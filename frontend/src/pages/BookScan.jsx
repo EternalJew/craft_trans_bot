@@ -44,7 +44,27 @@ export default function BookScanPage() {
     }
   }
 
-  const edit = (i, key, value) => setRows((prev) => prev.map((r, j) => (j === i ? { ...r, [key]: value } : r)))
+  // Seats come from the running totals in a chain, so fixing one circled
+  // number must re-derive every row after it. Same rule as the backend: a
+  // struck-out row whose number the next row reuses does not advance the total.
+  const deriveSeats = (list) => {
+    let previous = 0
+    return list.map((r, i) => {
+      const total = r.running_total === '' || r.running_total == null ? null : Number(r.running_total)
+      if (total == null || Number.isNaN(total)) return r
+      const seats = Math.max(total - previous, 0)
+      const next = list[i + 1]
+      const nextTotal = next && next.running_total != null && next.running_total !== '' ? Number(next.running_total) : null
+      const reused = r.crossed_out && nextTotal === total
+      if (!reused) previous = Math.max(previous, total)
+      return { ...r, seats }
+    })
+  }
+
+  const edit = (i, key, value) => setRows((prev) => {
+    const next = prev.map((r, j) => (j === i ? { ...r, [key]: value, ...(key === 'crossed_out' ? { include: !value } : {}) } : r))
+    return key === 'running_total' || key === 'crossed_out' ? deriveSeats(next) : next
+  })
   const removeRow = (i) => setRows((prev) => prev.filter((_, j) => j !== i))
   const addRow = () => setRows((prev) => [...prev, {
     line_no: prev.length + 1, running_total: null, seats: 1, from_city: '', to_city: '',
@@ -134,7 +154,7 @@ export default function BookScanPage() {
               <thead>
                 <tr className="text-left text-gray-500">
                   <th className="p-2 w-8"></th>
-                  <th className="p-2 w-10">№</th>
+                  <th className="p-2 w-24">№ у кружечку</th>
                   <th className="p-2 w-16">Місць</th>
                   <th className="p-2">Звідки</th>
                   <th className="p-2">Куди</th>
@@ -147,7 +167,15 @@ export default function BookScanPage() {
                 {rows.map((r, i) => (
                   <tr key={i} className={`border-t ${!r.include ? 'opacity-40' : r.uncertain ? 'bg-amber-50' : ''}`}>
                     <td className="p-2"><input type="checkbox" checked={r.include} onChange={(e) => edit(i, 'include', e.target.checked)} /></td>
-                    <td className="p-2 text-gray-400">{r.running_total ?? '·'}{r.crossed_out ? ' ✗' : ''}</td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-1">
+                        <input type="number" min="0" value={r.running_total ?? ''} onChange={(e) => edit(i, 'running_total', e.target.value)}
+                               title="число в кружечку" className="border rounded px-1 py-1 w-12 text-sm text-center" />
+                        <button type="button" onClick={() => edit(i, 'crossed_out', !r.crossed_out)}
+                                title={r.crossed_out ? 'закреслено — натисніть, щоб зняти' : 'позначити закресленим'}
+                                className={`text-xs ${r.crossed_out ? 'text-red-600' : 'text-gray-300 hover:text-gray-500'}`}>✗</button>
+                      </div>
+                    </td>
                     <td className="p-2"><input type="number" min="1" max="8" value={r.seats ?? ''} onChange={(e) => edit(i, 'seats', e.target.value)} className={cell} /></td>
                     <td className="p-2"><input value={r.from_city} onChange={(e) => edit(i, 'from_city', e.target.value)} className={cell} /></td>
                     <td className="p-2"><input value={r.to_city} onChange={(e) => edit(i, 'to_city', e.target.value)} className={cell} /></td>
