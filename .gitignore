@@ -42,3 +42,9 @@ frontend/dist/
 
 # Windows
 Thumbs.db
+# Source photos dropped in for processing. Book pages carry passengers' phone
+# numbers, so the folder stays local; web-ready images live in backend/static.
+images/
+
+# Hand-made split dataset — real passengers' towns, kept local
+data/splits.txt

@@ -9,6 +9,7 @@ A first, deliberately simple pass. Every saved correction is a labelled example
 for a better one.
 """
 import re
+import unicodedata
 from itertools import combinations
 from typing import Dict, List, Optional, Sequence
 
@@ -56,7 +57,11 @@ UA_ORDER = list(UA_ZONES)
 
 
 def _norm(city: str) -> str:
-    return re.sub(r"[\s\-–—.]+", " ", (city or "").strip().casefold())
+    """Case, spacing and Czech diacritics all vary between the book and the
+    admin: Bílina, Bilina and bilina are one town."""
+    text = unicodedata.normalize("NFKD", (city or "").strip().casefold())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"[\s\-–—.]+", " ", text)
 
 
 def _index(zones: Dict[str, List[str]]) -> Dict[str, str]:
