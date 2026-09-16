@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getRides, getRideBookings, getRideSplit, saveRideSplit } from '../api'
+import { getRides, getRideBookings, getRideSplit, saveRideSplit, getUsers } from '../api'
 
 const fmtDate = (iso) =>
   new Date(iso + 'T00:00:00').toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'long' })
@@ -18,8 +18,13 @@ export default function SplitPage() {
   const [busy, setBusy]         = useState(false)
   const [note, setNote]         = useState(null)
   const [suggested, setSuggested] = useState(null)
+  const [drivers, setDrivers]   = useState([])
+  const [vanDrivers, setVanDrivers] = useState([])
 
-  useEffect(() => { getRides().then((r) => setRides(r.data)) }, [])
+  useEffect(() => {
+    getRides().then((r) => setRides(r.data))
+    getUsers().then((r) => setDrivers(r.data.filter((u) => u.role === 'driver')))
+  }, [])
 
   useEffect(() => {
     if (!rideId) return
@@ -31,6 +36,7 @@ export default function SplitPage() {
       setCapacity(s.data.capacity)
       setSaved(s.data.saved)
       setSuggested(s.data.suggested_vans)
+      setVanDrivers(s.data.drivers || [])
     }).finally(() => setBusy(false))
   }, [rideId])
 
@@ -40,7 +46,7 @@ export default function SplitPage() {
     setBusy(true); setNote(null)
     try {
       const s = await getRideSplit(rideId, n)
-      setVans(s.data.vans); setSaved(false)
+      setVans(s.data.vans); setVanDrivers(s.data.drivers || []); setSaved(false)
     } finally {
       setBusy(false)
     }
@@ -87,9 +93,10 @@ ${lines.join('\n')}
   const save = async () => {
     setBusy(true)
     try {
-      await saveRideSplit(rideId, { vans })
+      await saveRideSplit(rideId, { vans, drivers: vans.map((_, i) => vanDrivers[i] || null) })
       setSaved(true)
-      setNote('Розподіл збережено — водії побачать свій бус у маніфесті.')
+      const named = vans.map((_, i) => vanDrivers[i]).filter(Boolean).length
+      setNote(named ? `Збережено — ${named} водіям надіслано повний список у Telegram.` : 'Розподіл збережено.')
     } finally {
       setBusy(false)
     }
@@ -158,7 +165,14 @@ ${lines.join('\n')}
               return (
                 <div key={vi} className={`bg-white rounded-lg shadow-sm p-3 ${over ? 'ring-2 ring-red-400' : ''}`}>
                   <div className="flex items-baseline justify-between mb-2 gap-2">
-                    <div className="font-semibold">Бус {vi + 1}</div>
+                    <div className="font-semibold flex items-baseline gap-2">
+                      Бус {vi + 1}
+                      <select value={vanDrivers[vi] || ''} onChange={(e) => { const v = [...vanDrivers]; v[vi] = e.target.value ? Number(e.target.value) : null; setVanDrivers(v); setSaved(false) }}
+                              className="text-xs font-normal border rounded px-1 py-0.5 text-gray-600 max-w-[130px]">
+                        <option value="">— водій —</option>
+                        {drivers.map((d) => <option key={d.id} value={d.id}>{d.full_name || d.username}{d.telegram_id ? '' : ' (не в боті)'}</option>)}
+                      </select>
+                    </div>
                     <div className="flex items-baseline gap-3">
                       <button onClick={() => copy(vanText(van, vi), `бус ${vi + 1}`)} className="text-xs text-blue-700 hover:underline">
                         копіювати

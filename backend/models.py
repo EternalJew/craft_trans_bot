@@ -14,8 +14,12 @@ class User(Base):
     phone         = Column(String, nullable=True)
     role          = Column(String, default="driver")  # "admin" | "driver"
     telegram_id   = Column(Integer, unique=True, nullable=True, index=True)
+    # One-time code behind a t.me/<bot>?start=drv_<code> link. Tapping it in
+    # Telegram binds the driver's account to their telegram_id — no password.
+    invite_code   = Column(String, unique=True, nullable=True, index=True)
 
     assigned_rides = relationship("Ride", back_populates="driver", foreign_keys="Ride.driver_id")
+    vans           = relationship("RideVan", back_populates="driver")
 
 
 class Route(Base):
@@ -62,6 +66,21 @@ class Ride(Base):
     driver   = relationship("User", back_populates="assigned_rides", foreign_keys=[driver_id])
     bookings = relationship("Booking", back_populates="ride", cascade="all, delete-orphan")
     parcels  = relationship("Parcel", back_populates="ride")
+    vans     = relationship("RideVan", back_populates="ride", cascade="all, delete-orphan",
+                            order_by="RideVan.van_no")
+
+
+class RideVan(Base):
+    """A departure day usually runs as two or three vans, each with its own
+    driver. Bookings point at a van through Booking.van_no."""
+    __tablename__ = "ride_vans"
+    id        = Column(Integer, primary_key=True, index=True)
+    ride_id   = Column(Integer, ForeignKey("rides.id"), nullable=False, index=True)
+    van_no    = Column(Integer, nullable=False)
+    driver_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    ride   = relationship("Ride", back_populates="vans")
+    driver = relationship("User", back_populates="vans")
 
 
 class Booking(Base):

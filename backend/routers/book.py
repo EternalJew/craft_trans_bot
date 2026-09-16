@@ -152,5 +152,9 @@ def import_rows(body: ImportRequest, db: Session = Depends(get_db), _=Depends(re
             existing[key] = booking
         created += 1
 
+    if created:
+        db.flush()
+        db.refresh(ride)
+        notify.notify_ride_drivers(db, ride)
     db.commit()
     return ImportResult(created=created, matched=matched, skipped=skipped)

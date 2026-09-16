@@ -81,12 +81,14 @@ def ride_bookings(ride_id: int, db: Session = Depends(get_db)):
 # ── Splitting a day between vans ──────────────────────────────────────────────
 
 from pydantic import BaseModel
+import notify
 import split
 
 
 class SplitOut(BaseModel):
     capacity: int
     vans: List[List[int]]      # booking ids per van, in route order
+    drivers: List[Optional[int]]   # driver user id per van, same order
     saved: bool                # True if this is the stored split, not a fresh proposal
     suggested_vans: int        # what the owner's rule of thumb says for this many people
     total_seats: int
@@ -94,6 +96,12 @@ class SplitOut(BaseModel):
 
 class SplitIn(BaseModel):
     vans: List[List[int]]
+    drivers: List[Optional[int]] = []
+
+
+def _drivers_for(ride: models.Ride, count: int) -> List[Optional[int]]:
+    by_no = {v.van_no: v.driver_id for v in ride.vans}
+    return [by_no.get(i + 1) for i in range(count)]
 
 
 @router.get("/{ride_id}/split", response_model=SplitOut)
@@ -118,14 +126,14 @@ def ride_split(
             by_van.setdefault(b.van_no or 0, []).append(b.id)
         # van 0 = not yet assigned; keep it last so it is visible
         stored = [by_van[k] for k in sorted(by_van) if k] + ([by_van[0]] if 0 in by_van else [])
-        return SplitOut(capacity=split.CAPACITY, vans=stored, saved=True,
-                        suggested_vans=suggested, total_seats=total)
+        return SplitOut(capacity=split.CAPACITY, vans=stored, drivers=_drivers_for(ride, len(stored)),
+                        saved=True, suggested_vans=suggested, total_seats=total)
 
     passengers = [{"id": b.id, "from_city": b.from_city, "to_city": b.to_city, "seats": b.seats}
                   for b in confirmed]
     proposal = split.propose(passengers, ride.route.direction, n_vans=vans)
-    return SplitOut(capacity=split.CAPACITY, vans=proposal, saved=False,
-                    suggested_vans=suggested, total_seats=total)
+    return SplitOut(capacity=split.CAPACITY, vans=proposal, drivers=_drivers_for(ride, len(proposal)),
+                    saved=False, suggested_vans=suggested, total_seats=total)
 
 
 @router.post("/{ride_id}/split", response_model=SplitOut)
@@ -140,7 +148,25 @@ def save_split(ride_id: int, body: SplitIn, db: Session = Depends(get_db), _=Dep
         for booking_id in ids:
             if booking_id in own:
                 own[booking_id].van_no = van_no
+
+    # one RideVan per van, driver optional
+    existing = {v.van_no: v for v in ride.vans}
+    for van_no in range(1, len(body.vans) + 1):
+        driver_id = body.drivers[van_no - 1] if van_no - 1 < len(body.drivers) else None
+        if van_no in existing:
+            existing[van_no].driver_id = driver_id
+        else:
+            db.add(models.RideVan(ride_id=ride.id, van_no=van_no, driver_id=driver_id))
+    for van_no, v in existing.items():
+        if van_no > len(body.vans):
+            db.delete(v)
+    db.flush()
+    db.refresh(ride)
+
+    # the drivers hear about it straight away — that is the point of assigning them
+    notify.notify_ride_drivers(db, ride)
     db.commit()
+    db.refresh(ride)
     total = sum(b.seats for b in own.values() if b.status == "confirmed")
-    return SplitOut(capacity=split.CAPACITY, vans=body.vans, saved=True,
-                    suggested_vans=split.suggest_van_count(total), total_seats=total)
+    return SplitOut(capacity=split.CAPACITY, vans=body.vans, drivers=_drivers_for(ride, len(body.vans)),
+                    saved=True, suggested_vans=split.suggest_van_count(total), total_seats=total)

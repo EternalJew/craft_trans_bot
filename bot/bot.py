@@ -7,7 +7,7 @@ from html import escape as esc
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.filters.state import StateFilter
 from aiogram.types import (
     BotCommand, BotCommandScopeDefault, MenuButtonCommands,
@@ -174,6 +174,38 @@ def public_kb():
     )
 
 
+BTN_DRV_RIDE   = "🚚 Мій рейс"
+BTN_DRV_BOOK   = "➕ Записати пасажира"
+BTN_DRV_RIDES  = "🗓 Найближчі рейси"
+
+
+def driver_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_DRV_RIDE)],
+            [KeyboardButton(text=BTN_DRV_BOOK), KeyboardButton(text=BTN_DRV_RIDES)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Ви ввійшли як водій",
+    )
+
+
+# telegram_id -> staff user, or None. Cached: the answer changes only when an
+# invite is claimed, and claiming refreshes it.
+_staff_cache: dict = {}
+
+
+async def staff_user(telegram_id: int):
+    if telegram_id in _staff_cache:
+        return _staff_cache[telegram_id]
+    try:
+        user = await api_get(f"/api/users/by-telegram/{telegram_id}")
+    except Exception:
+        user = None
+    _staff_cache[telegram_id] = user
+    return user
+
+
 def phone_kb():
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📱 Поділитися номером", request_contact=True)]],
@@ -196,8 +228,44 @@ async def link_contact(phone: str, tg_user: types.User):
 
 # ── Commands ──────────────────────────────────────────────────────────────────
 
+@dp.message(CommandStart(deep_link=True))
+async def cmd_start_invite(message: types.Message, command: CommandObject):
+    payload = command.args or ""
+    if not payload.startswith("drv_"):
+        await cmd_help(message)
+        return
+    try:
+        user = await api_post("/api/users/claim-invite", {
+            "code": payload[4:],
+            "telegram_id": message.from_user.id,
+            "full_name": message.from_user.full_name,
+        })
+    except httpx.HTTPStatusError as e:
+        detail = e.response.json().get("detail", "Запрошення не спрацювало")
+        await message.answer(f"{detail}. Попросіть нове посилання в адмінці.")
+        return
+    _staff_cache[message.from_user.id] = user
+    await message.answer(
+        f"Вітаємо, {esc(user.get('full_name') or user['username'])}!\n"
+        "Ви підключені як водій. Тут буде ваш список на рейс, і сюди ж можна "
+        "записати пасажира, який подзвонив вам.",
+        parse_mode=HTML,
+        reply_markup=driver_kb(),
+    )
+
+
 @dp.message(Command("start", "help"))
 async def cmd_help(message: types.Message):
+    user = await staff_user(message.from_user.id)
+    if user and user.get("role") == "driver":
+        await message.answer(
+            f"<b>{esc(user.get('full_name') or user['username'])}</b> · водій\n\n"
+            "🚚 Мій рейс — повний список на найближчий виїзд, усі буси.\n"
+            "➕ Записати пасажира — той, хто подзвонив вам, потрапить у чергу до власника.",
+            parse_mode=HTML,
+            reply_markup=driver_kb(),
+        )
+        return
     await message.answer(
         "<b>craft plus</b> — пасажири та посилки Україна ⇄ Чехія\n"
         "<i>Забираємо з-під дому й довозимо за адресою.</i>\n\n"
@@ -225,6 +293,7 @@ async def cmd_whoami(message: types.Message):
 
 @dp.message(Command("rides"))
 @dp.message(F.text == BTN_RIDES)
+@dp.message(F.text == BTN_DRV_RIDES)
 async def cmd_rides(message: types.Message):
     try:
         rides = await api_get("/api/rides")
@@ -254,7 +323,9 @@ async def cmd_rides(message: types.Message):
 
 @dp.message(Command("book"))
 @dp.message(F.text == BTN_BOOK)
+@dp.message(F.text == BTN_DRV_BOOK)
 async def cmd_book(message: types.Message, state: FSMContext):
+    await state.update_data(as_driver=message.text == BTN_DRV_BOOK)
     # Direction first — a mixed list of dates gets people booking the nearest
     # departure even when it goes the other way.
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -474,8 +545,9 @@ async def booking_comment(message: types.Message, state: FSMContext):
         "from_address": data.get("from_address"),
         "to_address":   data.get("to_address"),
         "comment":      comment,
-        "telegram_id":  message.from_user.id,
-        "source":       "bot",
+        # a driver typing in someone else's booking must not be linked to it
+        "telegram_id":  None if data.get("as_driver") else message.from_user.id,
+        "source":       "driver" if data.get("as_driver") else "bot",
     }
 
     try:
@@ -500,7 +572,7 @@ async def booking_comment(message: types.Message, state: FSMContext):
         "За добу до виїзду надішлемо нагадування з часом подачі, "
         "а в день виїзду — повідомлення коли водій вирушить."
     )
-    await message.answer(text, reply_markup=public_kb())
+    await message.answer(text, reply_markup=driver_kb() if data.get("as_driver") else public_kb())
     await state.clear()
 
 
@@ -861,6 +933,25 @@ async def cmd_driver(message: types.Message):
         web_app=types.WebAppInfo(url=f"{WEBAPP_URL}/driver"),
     )]])
     await message.answer("Відкрийте маніфест на сьогодні:", reply_markup=kb)
+
+
+@dp.message(F.text == BTN_DRV_RIDE)
+@dp.message(Command("myride"))
+async def cmd_my_ride(message: types.Message):
+    user = await staff_user(message.from_user.id)
+    if not user or user.get("role") != "driver":
+        await message.answer("Це меню для водіїв. Щоб під'єднатися, потрібне посилання-запрошення з адмінки.")
+        return
+    try:
+        rides = await api_get("/api/driver/upcoming", params={"telegram_id": message.from_user.id})
+    except Exception:
+        await message.answer("Не вдалося завантажити рейс. Спробуйте пізніше.")
+        return
+    if not rides:
+        await message.answer("На найближчі дні вас ще не поставили на рейс.", reply_markup=driver_kb())
+        return
+    for r in rides[:2]:
+        await message.answer(r["text"], reply_markup=driver_kb())
 
 
 # ── /fleet ─────────────────────────────────────────────────────────────────

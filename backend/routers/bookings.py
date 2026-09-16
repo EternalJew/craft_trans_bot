@@ -79,6 +79,9 @@ def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
     ride.seats_free -= body.seats
     db.flush()
     notify.notify_owner_new_booking(db, booking)
+    # drivers already assigned to this day see the newcomer under "не розподілені"
+    db.refresh(ride)
+    notify.notify_ride_drivers(db, ride)
     db.commit()
     db.refresh(booking)
     return booking
@@ -150,5 +153,9 @@ def cancel_booking(
         ride.seats_free += booking.seats
 
     db.delete(booking)
+    db.flush()
+    if ride:
+        db.refresh(ride)
+        notify.notify_ride_drivers(db, ride)
     db.commit()
     return {"ok": True}

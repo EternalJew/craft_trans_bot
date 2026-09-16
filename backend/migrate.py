@@ -17,6 +17,9 @@ ADDED_COLUMNS = {
     "notifications": {
         "entity_id": "INTEGER",
     },
+    "users": {
+        "invite_code": "VARCHAR",
+    },
 }
 
 

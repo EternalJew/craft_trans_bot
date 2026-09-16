@@ -218,3 +218,53 @@ def notify_ride_departed(db: Session, ride: models.Ride) -> int:
     ride.started_at = datetime.utcnow()
     db.commit()
     return queued
+
+
+# ── Drivers ───────────────────────────────────────────────────────────────────
+
+def ride_list_text(ride: models.Ride) -> str:
+    """The whole day as the drivers see it: every van, every passenger, plus
+    anyone not yet placed in a van."""
+    weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"][ride.date.weekday()]
+    confirmed = [b for b in ride.bookings if b.status == "confirmed"]
+    drivers = {v.van_no: v.driver for v in ride.vans}
+    van_nos = sorted({v.van_no for v in ride.vans} | {b.van_no for b in confirmed if b.van_no})
+
+    lines = [f"{weekday}, {ride.date.strftime('%d.%m')} · {ride.route.name}",
+             f"Пасажирів: {sum(b.seats for b in confirmed)}"]
+
+    def row(i: int, b: models.Booking) -> str:
+        extra = " · ".join(x for x in [
+            f"подача: {b.from_address}" if b.from_address else "",
+            f"висадка: {b.to_address}" if b.to_address else "",
+            b.comment or "",
+        ] if x)
+        seats = f"{b.seats} {'місце' if b.seats == 1 else 'місць'}"
+        return f"{i}. {b.from_city} – {b.to_city} · {seats} · {b.phone}" + (f" ({extra})" if extra else "")
+
+    for van_no in van_nos:
+        d = drivers.get(van_no)
+        who = f" — {d.full_name or d.username}" if d else ""
+        lines.append("")
+        lines.append(f"🚐 Бус {van_no}{who}")
+        for i, b in enumerate([b for b in confirmed if b.van_no == van_no], 1):
+            lines.append(row(i, b))
+
+    loose = [b for b in confirmed if not b.van_no]
+    if loose:
+        lines.append("")
+        lines.append("Ще не розподілені:")
+        for i, b in enumerate(loose, 1):
+            lines.append(row(i, b))
+    return "\n".join(lines)
+
+
+def notify_ride_drivers(db: Session, ride: models.Ride) -> int:
+    """Every driver assigned to any van of this ride gets the current full list."""
+    text = ride_list_text(ride)
+    sent = 0
+    for van in ride.vans:
+        if van.driver and van.driver.telegram_id:
+            enqueue(db, van.driver.telegram_id, text, "ride_list", entity_id=ride.id)
+            sent += 1
+    return sent

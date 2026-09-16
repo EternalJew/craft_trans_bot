@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getUsers, createUser, updateUser, deleteUser } from '../api'
+import { getUsers, createUser, updateUser, deleteUser, inviteUser } from '../api'
 
 const EMPTY_FORM = {
   username: '',
@@ -38,6 +38,16 @@ export default function DriversPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const [invite, setInvite] = useState({})
+
+  // A one-time t.me link. The driver taps it, the bot binds the account —
+  // nobody copies a telegram_id by hand.
+  const handleInvite = async (user) => {
+    const res = await inviteUser(user.id)
+    setInvite((prev) => ({ ...prev, [user.id]: res.data.link }))
+    try { await navigator.clipboard?.writeText(res.data.link) } catch {}
   }
 
   const handleTelegramId = async (user) => {
@@ -104,13 +114,20 @@ export default function DriversPage() {
                 </td>
                 <td className="px-4 py-3">
                   {u.telegram_id
-                    ? <span className="font-mono text-xs">{u.telegram_id}</span>
-                    : <span className="text-orange-500 text-xs">не вказано</span>}
+                    ? <span className="text-green-700 text-xs">✓ підключено</span>
+                    : invite[u.id]
+                      ? <span className="text-xs">
+                          <input readOnly value={invite[u.id]} onFocus={(e) => e.target.select()}
+                                 className="border rounded px-2 py-1 w-64 font-mono text-xs" />
+                        </span>
+                      : <span className="text-orange-500 text-xs">не підключено</span>}
                 </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <button onClick={() => handleTelegramId(u)} className="text-blue-500 hover:text-blue-700 text-sm mr-4">
-                    Telegram ID
-                  </button>
+                  {u.role === 'driver' && (
+                    <button onClick={() => handleInvite(u)} className="text-blue-500 hover:text-blue-700 text-sm mr-4">
+                      {u.telegram_id ? 'Перепідключити' : 'Запросити в бот'}
+                    </button>
+                  )}
                   <button onClick={() => handleDelete(u)} className="text-red-400 hover:text-red-600 text-sm">
                     Видалити
                   </button>

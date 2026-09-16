@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 import models, schemas, notify, storage
 from database import get_db
-from auth import get_current_user, oauth2_scheme, require_driver, require_driver_webapp
+from auth import get_current_user, oauth2_scheme, require_driver, require_driver_webapp, verify_bot_key
 
 router = APIRouter(prefix="/api/driver", tags=["driver"])
 
@@ -25,34 +25,50 @@ async def current_driver(
     return user
 
 
+def _drives(ride: models.Ride, user: models.User) -> bool:
+    return ride.driver_id == user.id or any(v.driver_id == user.id for v in ride.vans)
+
+
+def _rides_of(db: Session, user: models.User, from_day: Optional[date] = None):
+    q = db.query(models.Ride).outerjoin(models.RideVan).filter(
+        (models.Ride.driver_id == user.id) | (models.RideVan.driver_id == user.id)
+    )
+    if from_day:
+        q = q.filter(models.Ride.date >= from_day)
+    return q.order_by(models.Ride.date).distinct().all()
+
+
 def _owned_ride(db: Session, ride_id: int, user: models.User) -> models.Ride:
     ride = db.query(models.Ride).filter(models.Ride.id == ride_id).first()
     if not ride:
         raise HTTPException(status_code=404, detail="Ride not found")
-    if user.role == "driver" and ride.driver_id != user.id:
+    if user.role == "driver" and not _drives(ride, user):
         raise HTTPException(status_code=403, detail="Not your ride")
     return ride
 
 
 @router.get("/rides", response_model=List[schemas.RideOut])
 def my_rides(db: Session = Depends(get_db), user: models.User = Depends(require_driver)):
-    return (
-        db.query(models.Ride)
-        .filter(models.Ride.driver_id == user.id)
-        .order_by(models.Ride.date)
-        .all()
-    )
+    return _rides_of(db, user)
+
+
+@router.get("/upcoming")
+def upcoming_for_bot(
+    telegram_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(verify_bot_key),
+):
+    """What the bot shows on «Мій рейс»: the driver's next days, whole ride each."""
+    user = db.query(models.User).filter(models.User.telegram_id == telegram_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Not a driver")
+    rides = _rides_of(db, user, from_day=date.today())
+    return [{"ride_id": r.id, "date": r.date.isoformat(), "text": notify.ride_list_text(r)} for r in rides]
 
 
 @router.get("/me")
 async def me(user: models.User = Depends(current_driver), db: Session = Depends(get_db)):
-    today = date.today()
-    rides = (
-        db.query(models.Ride)
-        .filter(models.Ride.driver_id == user.id, models.Ride.date >= today)
-        .order_by(models.Ride.date)
-        .all()
-    )
+    rides = _rides_of(db, user, from_day=date.today())
     return {
         "driver": schemas.UserOut.model_validate(user),
         "rides": [schemas.RideOut.model_validate(r) for r in rides],

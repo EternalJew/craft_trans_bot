@@ -25,6 +25,7 @@ class UserOut(BaseModel):
     phone:       Optional[str] = None
     role:        str
     telegram_id: Optional[int] = None
+    invite_code: Optional[str] = None
     model_config = {"from_attributes": True}
 
 class UserMe(UserOut):
