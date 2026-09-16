@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getBookQueue, getRides, markWrittenInBook, searchBookings } from '../api'
+import CallForm from '../components/CallForm'
 
 const SOURCE_LABELS = {
   web:    { label: 'Сайт',    color: 'bg-blue-100 text-blue-700' },
@@ -16,6 +17,7 @@ const fmtTaken = (iso) => new Date(iso).toLocaleString('uk-UA', { day: 'numeric'
 export default function BookQueuePage() {
   const [bookings, setBookings] = useState([])
   const [rides, setRides]       = useState({})
+  const [rideList, setRideList] = useState([])
   const [loading, setLoading]   = useState(true)
   const [phone, setPhone]       = useState('')
   const [found, setFound]       = useState(null)
@@ -25,6 +27,7 @@ export default function BookQueuePage() {
     try {
       const [queue, rideList] = await Promise.all([getBookQueue(), getRides()])
       setBookings(queue.data)
+      setRideList(rideList.data)
       setRides(Object.fromEntries(rideList.data.map((r) => [r.id, r])))
     } finally {
       setLoading(false)
@@ -56,6 +59,8 @@ export default function BookQueuePage() {
         Бронювання, які прийшли з сайту, бота чи по телефону і ще не перенесені в книжку.
         Той самий список приходить власнику в Telegram — тут видно, що він уже підтвердив.
       </p>
+
+      <CallForm rides={rideList} onSaved={load} />
 
       <form onSubmit={search} className="flex gap-2 mb-8 max-w-md">
         <input
