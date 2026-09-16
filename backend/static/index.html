@@ -90,6 +90,7 @@
   .strip .towns { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 14.5px; color: #B8B6B8; }
   .strip .towns b { font-family: Rubik, sans-serif; font-weight: 500; color: #FFFFFF; }
   .strip .towns i { width: 44px; height: 1px; background: rgba(217,217,217,.3); display: block; }
+  .strip .towns .side { display: contents; }
   .strip .aside { font-size: 14px; color: #8B898B; }
 
   section.pad { padding: 96px 24px; }
@@ -189,6 +190,14 @@
   footer nav a { color: #8B898B; }
   footer nav a:hover { color: #FFFFFF; }
 
+  @media (max-width: 480px) {
+    .book .row:not(.seats) { grid-template-columns: 1fr; }
+    .strip .towns i { display: none; }
+    .strip .towns { gap: 6px 12px; }
+    .strip .towns .side { display: flex; flex-wrap: wrap; gap: 6px 12px; width: 100%; }
+    .strip .towns .side span:not(:last-child)::after { content: "·"; color: #6F6D6F; margin-left: 12px; }
+    .strip .towns .sw { display: none; }
+  }
   @media (max-width: 900px) {
     .hero .wrap { grid-template-columns: 1fr; gap: 36px; }
     .hero { padding: 56px 20px 64px; }
@@ -314,9 +323,9 @@
 <section class="strip">
   <div class="wrap">
     <div class="towns">
-      <b>Рівне</b><i></i><span>Луцьк</span><i></i><span>Львів</span><i></i><span>Остріг</span><i></i><span>Сарни</span>
-      <span style="color:#8FA6F7;margin:0 4px">⇄</span>
-      <b>Прага</b><i></i><span>Брно</span><i></i><span>Мост</span><i></i><span>Хомутов</span><i></i><span>Острава</span>
+      <span class="side"><b>Рівне</b><i></i><span>Луцьк</span><i></i><span>Львів</span><i></i><span>Остріг</span><i></i><span>Сарни</span></span>
+      <span class="sw" style="color:#8FA6F7;margin:0 4px">⇄</span>
+      <span class="side"><b>Прага</b><i></i><span>Брно</span><i></i><span>Мост</span><i></i><span>Хомутов</span><i></i><span>Острава</span></span>
     </div>
     <div class="aside">Забираємо і з менших містечок та сіл по дорозі — запитуйте</div>
   </div>
