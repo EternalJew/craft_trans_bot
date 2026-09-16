@@ -79,6 +79,11 @@ export default function BookScanPage() {
     .sort((a, b) => a.date.localeCompare(b.date))
 
   const total = rows.filter((r) => r.include).reduce((s, r) => s + (Number(r.seats) || 0), 0)
+  // The last circled number on the page IS the day's total. If the seats we
+  // derived do not add up to it, one of the circled digits was misread.
+  const bookTotal = rows.filter((r) => !r.crossed_out && r.running_total != null)
+    .reduce((m, r) => Math.max(m, Number(r.running_total)), 0)
+  const mismatch = scan && bookTotal > 0 && total !== bookTotal
   const cell = 'border rounded px-2 py-1 w-full text-sm'
 
   return (
@@ -156,9 +161,11 @@ export default function BookScanPage() {
 
             <div className="flex flex-wrap items-center gap-3 mt-4">
               <button onClick={addRow} className="text-sm text-blue-700 hover:underline">+ рядок</button>
-              <div className="text-sm text-gray-500 ml-auto">
+              <div className={`text-sm ml-auto ${mismatch ? 'text-red-700' : 'text-gray-500'}`}>
                 До імпорту: <b>{rows.filter((r) => r.include).length}</b> записів, <b>{total}</b> місць
-                {total > 8 && <> · {Math.ceil(total / 8)} буси</>}
+                {bookTotal > 0 && <> · за зошитом <b>{bookTotal}</b></>}
+                {mismatch && <> — не сходиться, перевірте числа в кружечках</>}
+                {!mismatch && total > 8 && <> · {Math.ceil(total / 8)} буси</>}
               </div>
               <button onClick={doImport} disabled={busy || !rideId || !rows.some((r) => r.include)}
                       className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg px-5 py-2">

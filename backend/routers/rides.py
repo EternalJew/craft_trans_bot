@@ -88,6 +88,8 @@ class SplitOut(BaseModel):
     capacity: int
     vans: List[List[int]]      # booking ids per van, in route order
     saved: bool                # True if this is the stored split, not a fresh proposal
+    suggested_vans: int        # what the owner's rule of thumb says for this many people
+    total_seats: int
 
 
 class SplitIn(BaseModel):
@@ -95,25 +97,35 @@ class SplitIn(BaseModel):
 
 
 @router.get("/{ride_id}/split", response_model=SplitOut)
-def ride_split(ride_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
-    """The saved split if there is one, otherwise a proposal."""
+def ride_split(
+    ride_id: int,
+    vans: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """The saved split if there is one, otherwise a proposal. Pass ?vans=N to
+    get a fresh proposal for exactly N vans, ignoring what is saved."""
     ride = db.query(models.Ride).filter(models.Ride.id == ride_id).first()
     if not ride:
         raise HTTPException(status_code=404, detail="Ride not found")
     confirmed = [b for b in ride.bookings if b.status == "confirmed"]
+    total = sum(b.seats for b in confirmed)
+    suggested = split.suggest_van_count(total)
 
-    if any(b.van_no for b in confirmed):
+    if vans is None and any(b.van_no for b in confirmed):
         by_van = {}
         for b in confirmed:
             by_van.setdefault(b.van_no or 0, []).append(b.id)
         # van 0 = not yet assigned; keep it last so it is visible
-        vans = [by_van[k] for k in sorted(by_van) if k] + ([by_van[0]] if 0 in by_van else [])
-        return SplitOut(capacity=split.CAPACITY, vans=vans, saved=True)
+        stored = [by_van[k] for k in sorted(by_van) if k] + ([by_van[0]] if 0 in by_van else [])
+        return SplitOut(capacity=split.CAPACITY, vans=stored, saved=True,
+                        suggested_vans=suggested, total_seats=total)
 
     passengers = [{"id": b.id, "from_city": b.from_city, "to_city": b.to_city, "seats": b.seats}
                   for b in confirmed]
-    return SplitOut(capacity=split.CAPACITY,
-                    vans=split.propose(passengers, ride.route.direction), saved=False)
+    proposal = split.propose(passengers, ride.route.direction, n_vans=vans)
+    return SplitOut(capacity=split.CAPACITY, vans=proposal, saved=False,
+                    suggested_vans=suggested, total_seats=total)
 
 
 @router.post("/{ride_id}/split", response_model=SplitOut)
@@ -129,4 +141,6 @@ def save_split(ride_id: int, body: SplitIn, db: Session = Depends(get_db), _=Dep
             if booking_id in own:
                 own[booking_id].van_no = van_no
     db.commit()
-    return SplitOut(capacity=split.CAPACITY, vans=body.vans, saved=True)
+    total = sum(b.seats for b in own.values() if b.status == "confirmed")
+    return SplitOut(capacity=split.CAPACITY, vans=body.vans, saved=True,
+                    suggested_vans=split.suggest_van_count(total), total_seats=total)

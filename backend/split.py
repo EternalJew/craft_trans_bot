@@ -9,6 +9,7 @@ A first, deliberately simple pass. Every saved correction is a labelled example
 for a better one.
 """
 import re
+from itertools import combinations
 from typing import Dict, List, Optional, Sequence
 
 CAPACITY = 8
@@ -84,20 +85,40 @@ def sort_key(from_city: str, to_city: str, direction: str):
     return (cz_i, ua_i)
 
 
-def propose(passengers: Sequence[dict], direction: str, capacity: int = CAPACITY) -> List[List[int]]:
+def suggest_van_count(total_seats: int) -> int:
+    """The owner's rule of thumb: up to 16 people go in two vans, more in three."""
+    if total_seats <= CAPACITY:
+        return 1
+    if total_seats <= 16:
+        return 2
+    if total_seats <= 24:
+        return 3
+    return 4
+
+
+def propose(passengers: Sequence[dict], direction: str, n_vans: Optional[int] = None,
+            capacity: int = CAPACITY) -> List[List[int]]:
     """passengers: dicts with id, from_city, to_city, seats.
-    Returns a list of vans, each a list of passenger ids, in route order."""
+    Returns exactly n_vans lists of passenger ids. Each van is a contiguous
+    slice of the corridor-sorted order; the cut points are chosen so the
+    heaviest van is as light as possible, then so loads are as even as possible."""
     ordered = sorted(passengers, key=lambda p: sort_key(p["from_city"], p["to_city"], direction))
-    vans: List[List[int]] = []
-    load: List[int] = []
-    for p in ordered:
-        seats = max(int(p.get("seats") or 1), 1)
-        placed = False
-        # keep the corridor: prefer the van we are currently filling, then any with room
-        for i in range(len(vans) - 1, -1, -1):
-            if load[i] + seats <= capacity:
-                vans[i].append(p["id"]); load[i] += seats; placed = True
-                break
-        if not placed:
-            vans.append([p["id"]]); load.append(seats)
-    return vans
+    seats = [max(int(p.get("seats") or 1), 1) for p in ordered]
+    total = sum(seats)
+    n_vans = max(1, n_vans or suggest_van_count(total))
+    n = len(ordered)
+    if n == 0:
+        return [[] for _ in range(n_vans)]
+    if n_vans >= n:
+        return [[p["id"]] for p in ordered] + [[] for _ in range(n_vans - n)]
+
+    # a few thousand candidates at most (≤4 vans, a few dozen bookings)
+    best_key, best_bounds = None, None
+    for cuts in combinations(range(1, n), n_vans - 1):
+        bounds = (0,) + cuts + (n,)
+        loads = [sum(seats[a:b]) for a, b in zip(bounds, bounds[1:])]
+        key = (max(loads), sum(abs(l * n_vans - total) for l in loads))
+        if best_key is None or key < best_key:
+            best_key, best_bounds = key, bounds
+
+    return [[p["id"] for p in ordered[a:b]] for a, b in zip(best_bounds, best_bounds[1:])]
