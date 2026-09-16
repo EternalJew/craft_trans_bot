@@ -170,6 +170,7 @@ export default function BookScanPage() {
               <div className="mt-4 bg-green-50 text-green-800 rounded-lg px-4 py-3">
                 Створено {result.created}, збіглося з наявними {result.matched}.
                 {result.skipped.length > 0 && <> Пропущено: {result.skipped.join('; ')}</>}
+                {' '}<a href={`/admin/split?ride=${rideId}`} className="underline font-medium">Розподілити по бусах →</a>
               </div>
             )}
           </div>

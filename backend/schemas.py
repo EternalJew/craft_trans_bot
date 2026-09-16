@@ -139,6 +139,7 @@ class BookingOut(BookingBase):
     source:      str
     book_status:     str = "pending"
     book_written_at: Optional[datetime] = None
+    van_no:          Optional[int] = None
     model_config = {"from_attributes": True}
 
 

@@ -91,6 +91,9 @@ class Booking(Base):
     book_status     = Column(String, default="pending", index=True)  # pending | written
     book_written_at = Column(DateTime, nullable=True)
 
+    # Which van on a multi-van day. Null until the day is split.
+    van_no          = Column(Integer, nullable=True)
+
     reminded_day_before = Column(Boolean, default=False)
     reminded_departure  = Column(Boolean, default=False)
 

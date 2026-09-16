@@ -12,6 +12,7 @@ ADDED_COLUMNS = {
     "bookings": {
         "book_status":     "VARCHAR DEFAULT 'pending'",
         "book_written_at": "DATETIME",
+        "van_no":          "INTEGER",
     },
     "notifications": {
         "entity_id": "INTEGER",
