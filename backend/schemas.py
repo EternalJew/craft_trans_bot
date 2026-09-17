@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import date, datetime, time
 
@@ -155,7 +155,8 @@ class ParcelBase(BaseModel):
     receiver_phone:   str
     receiver_address: Optional[str] = None
     np_office:        Optional[str] = None
-    description:      Optional[str] = None
+    # Required: the driver has to be able to say what is in every box at the border.
+    description:      str = Field(min_length=3)
     price:            Optional[int] = None
     ride_id:          Optional[int] = None
 

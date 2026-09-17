@@ -27,6 +27,16 @@ const STATUSES = [
 
 const STATUS_COLOR = Object.fromEntries(STATUSES.map((s) => [s.value, s.color]))
 
+// FastAPI answers a failed validation with a list of objects, and React throws
+// if one of those reaches the JSX. Flatten it to a sentence.
+const errorText = (err) => {
+  const detail = err.response?.data?.detail
+  if (Array.isArray(detail)) {
+    return detail.map((d) => d.msg).join('; ') || 'Перевірте поля форми'
+  }
+  return detail || 'Помилка збереження'
+}
+
 export default function ParcelsPage() {
   const [parcels, setParcels]   = useState([])
   const [showForm, setShowForm] = useState(false)
@@ -55,7 +65,7 @@ export default function ParcelsPage() {
       setPhotoFile(null)
       load()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Помилка збереження')
+      setError(errorText(err))
     } finally {
       setLoading(false)
     }
@@ -268,14 +278,21 @@ export default function ParcelsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Опис вантажу</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Опис вантажу <span className="text-red-500">*</span>
+                  </label>
                   <textarea
+                    required
+                    minLength={3}
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     rows={3}
-                    placeholder="Що веземо?"
+                    placeholder="Що всередині? напр. документи, ліки, дитячий одяг"
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
                   />
+                  <div className="text-xs text-gray-400 mt-1">
+                    Обов'язково — водій має знати вміст на кордоні.
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <div>

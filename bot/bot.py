@@ -881,13 +881,21 @@ async def parcel_delivery_target(message: types.Message, state: FSMContext):
     else:
         await state.update_data(np_office=target)
     await state.set_state(ParcelStates.description)
-    await message.answer("Опис посилки — що всередині (або '-' щоб пропустити):")
+    await message.answer(
+        "Що всередині? Опишіть вміст — напр. «документи», «ліки, вітаміни», "
+        "«дитячий одяг, 2 кг».\n\nЦе обов'язково: на кордоні водій має знати, що везе."
+    )
 
 
 @dp.message(StateFilter(ParcelStates.description))
 async def parcel_description(message: types.Message, state: FSMContext):
-    desc = message.text.strip()
-    await state.update_data(description=None if desc == '-' else desc)
+    desc = (message.text or "").strip()
+    # A parcel with no declared contents is one the driver cannot answer for
+    # at the border, so this step does not accept a skip.
+    if len(desc.strip(" -–—.")) < 3:
+        await message.answer("Напишіть, будь ласка, що всередині — хоча б кількома словами.")
+        return
+    await state.update_data(description=desc)
     await state.set_state(ParcelStates.photo)
     await message.answer(
         "Надішліть фото посилки — воно збережеться в системі як підтвердження.\n"
