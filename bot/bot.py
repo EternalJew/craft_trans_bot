@@ -786,17 +786,26 @@ async def parcel_intake(callback: types.CallbackQuery, state: FSMContext):
     if kind == "np":
         lines = ["<b>Новою Поштою</b>"]
         if info.get("np_office"):
-            lines.append(f"Відправляйте на: <b>{esc(info['np_office'])}</b>")
+            lines.append(f"Відділення: <b>{esc(info['np_office'])}</b>")
+        # Nova Poshta asks for a named recipient, so give it before anything else.
+        if info.get("np_recipient"):
+            who = info["np_recipient"]
+            if info.get("np_recipient_phone"):
+                who += ", " + info["np_recipient_phone"]
+            lines.append(f"Одержувач: <b>{esc(who)}</b>")
         if info.get("np_days"):
             lines.append(f"Забираємо з відділення у {esc(info['np_days'])}.")
-        if info.get("np_deadline_weekday") and info.get("departure_weekday"):
-            lines.append(
-                f"Щоб поїхало у {esc(info['departure_weekday'])} "
-                f"({info['departure'][8:10]}.{info['departure'][5:7]}), "
-                f"посилка має бути на відділенні до {esc(info['np_deadline_weekday'])}."
-            )
+        if info.get("departure_weekday"):
+            when = (f"{esc(info['departure_weekday'])} "
+                    f"({info['departure'][8:10]}.{info['departure'][5:7]})")
+            if info.get("np_deadline_weekday"):
+                lines.append(f"Щоб поїхало у {when}, посилка має бути "
+                             f"на відділенні до {esc(info['np_deadline_weekday'])}.")
+            else:
+                lines.append(f"Найближчий виїзд — у {when}.")
         lines.append("")
-        lines.append("<i>Наприкінці я дам текст, який треба написати на коробці.</i>")
+        lines.append("<b>Посилку обов'язково підпишіть</b> — місто в Чехії та номер "
+                     "отримувача. Наприкінці я дам готовий текст.")
         await callback.message.answer("\n".join(lines), parse_mode=HTML)
     elif kind == "dropoff":
         where = info.get("dropoff") or "адресу скажемо в переписці"
@@ -958,8 +967,13 @@ async def _register_parcel(message: types.Message, state: FSMContext, photo_byte
         if info.get("np_office"):
             tail = (f"\nМає бути на відділенні до {esc(info['np_deadline_weekday'])}."
                     if info.get("np_deadline_weekday") else "")
+            who = ""
+            if info.get("np_recipient"):
+                who = "\nОдержувач: <b>" + esc(info["np_recipient"]) + "</b>"
+                if info.get("np_recipient_phone"):
+                    who += " — <code>" + esc(info["np_recipient_phone"]) + "</code>"
             await message.answer(
-                f"Відправляйте на <b>{esc(info['np_office'])}</b>" + tail,
+                f"Наше відділення: <b>{esc(info['np_office'])}</b>" + who + tail,
                 parse_mode=HTML,
             )
     await state.clear()

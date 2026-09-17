@@ -152,6 +152,9 @@
   .intake > div { border: 1px solid rgba(217,217,217,.16); border-radius: 12px; padding: 14px 16px; background: #1C1B1C; }
   .intake b { display: block; font-family: Rubik, sans-serif; font-weight: 500; font-size: 16px; color: #FFFFFF; margin-bottom: 4px; }
   .intake span { font-size: 14.5px; color: #A9A7A9; line-height: 1.5; }
+  .intake .to { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(217,217,217,.18);
+                color: #E8E7E8; }
+  .intake .to b { display: inline; font-size: inherit; color: #FFFFFF; margin: 0; }
   .label-note { font-size: 14.5px; line-height: 1.6; color: #CFCDCF; background: rgba(30,69,193,.12);
                 border-left: 2px solid #1E45C1; border-radius: 0 10px 10px 0; padding: 14px 16px; margin: 0 0 24px; }
   .label-note b { color: #FFFFFF; }
@@ -473,6 +476,7 @@
         <div>
           <b>📦 Новою Поштою</b>
           <span id="intake-np">Відправляєте на наше відділення — ми забираємо звідти й веземо далі.</span>
+          <span class="to" id="intake-np-to" hidden></span>
         </div>
         <div>
           <b>🚗 Привезти самим</b>
@@ -484,8 +488,10 @@
         </div>
       </div>
       <p class="label-note">
-        <b>Підпишіть коробку</b> — місто, адреса й телефон отримувача. Без підпису ми не знатимемо,
-        куди її везти. Бот дасть готовий текст, який лишиться переписати.
+        <b>Посилка обов'язково має бути підписана</b> — назва міста в Чехії та номер телефону
+        отримувача. Без підпису ми не знатимемо, куди її везти. І напишіть, що всередині:
+        на кордоні водій має відповісти за кожну коробку. Бот дасть готовий текст, який
+        лишиться переписати.
       </p>
       <div class="bullets">
         <div><i></i><span>Фотографуємо при прийомі, видаємо трек-номер</span></div>
@@ -716,9 +722,19 @@ $('track-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') tra
     const { bot_username } = cfg;
     const ua = cfg.parcel_intake?.['UA->CZ'] || {};
     if (ua.np_office) {
-      $('intake-np').textContent = `Відправляєте на ${ua.np_office}`
+      // a colon, not a preposition: the office line is written in the nominative
+      $('intake-np').textContent = `Наше відділення: ${ua.np_office}`
         + (ua.np_days ? `, ми забираємо звідти у ${ua.np_days}.` : '.')
-        + (ua.np_deadline_weekday ? ` Щоб поїхало у ${ua.departure_weekday}, посилка має бути там до ${ua.np_deadline_weekday}.` : '');
+        + (ua.np_deadline_weekday
+            ? ` Щоб поїхало у ${ua.departure_weekday}, посилка має бути там до ${ua.np_deadline_weekday}.`
+            : (ua.departure_weekday ? ` Найближчий виїзд — у ${ua.departure_weekday}.` : ''));
+    }
+    // Nova Poshta needs a name and a number, not just a branch.
+    if (ua.np_recipient || ua.np_recipient_phone) {
+      const to = $('intake-np-to');
+      to.textContent = 'Одержувач: '
+        + [ua.np_recipient, ua.np_recipient_phone].filter(Boolean).join(', ');
+      to.hidden = false;
     }
     if (ua.dropoff) $('intake-dropoff').textContent = `Привозите за адресою: ${ua.dropoff}`;
     if (bot_username) {

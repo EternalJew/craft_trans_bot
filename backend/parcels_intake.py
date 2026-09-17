@@ -27,6 +27,10 @@ def _days(raw: str) -> list[int]:
 
 
 NP_OFFICE = os.getenv("PARCEL_NP_OFFICE", "").strip()
+# Nova Poshta will not accept a parcel without a named recipient, so the sender
+# needs our name and number as much as the office itself.
+NP_RECIPIENT = os.getenv("PARCEL_NP_RECIPIENT", "").strip()
+NP_RECIPIENT_PHONE = os.getenv("PARCEL_NP_RECIPIENT_PHONE", "").strip()
 NP_DAYS = _days(os.getenv("PARCEL_NP_WEEKDAYS", ""))
 DROPOFF = os.getenv("PARCEL_DROPOFF", "").strip()
 
@@ -44,9 +48,14 @@ def next_departure(db: Session, direction: str, after: Optional[date] = None) ->
 
 
 def np_deadline(departure: date) -> Optional[date]:
-    """The last day we collect from the post office before this departure."""
+    """The last day we collect from the post office before this departure.
+
+    With no collection days configured we do not guess one. Telling a sender
+    "by Thursday" when we in fact only go on Mondays is worse than telling
+    them nothing, so the copy falls back to naming the departure instead.
+    """
     if not NP_DAYS:
-        return departure - timedelta(days=1)
+        return None
     for back in range(1, 15):
         day = departure - timedelta(days=back)
         if day.weekday() in NP_DAYS and day >= date.today():
@@ -68,6 +77,8 @@ def intake_info(db: Session, direction: str) -> dict:
     return {
         "direction": direction,
         "np_office": NP_OFFICE or None,
+        "np_recipient": NP_RECIPIENT or None,
+        "np_recipient_phone": NP_RECIPIENT_PHONE or None,
         "np_days": np_days_text() or None,
         "dropoff": DROPOFF or None,
         "departure": departure.isoformat() if departure else None,
@@ -78,6 +89,8 @@ def intake_info(db: Session, direction: str) -> dict:
 
 
 def label_text(city: str, address: str, phone: str) -> str:
-    """What the sender writes on the box: where it goes and who receives it."""
+    """What the sender writes on the box. The owner's rule, unchanged: the city
+    in Czechia and the receiver's number. An address, when we have one, only
+    shortens the driver's last kilometre."""
     where = ", ".join(x for x in [city.strip(), address.strip()] if x)
     return f"{where}\n{phone.strip()}"
