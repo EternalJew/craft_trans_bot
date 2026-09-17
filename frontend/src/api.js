@@ -15,7 +15,10 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('token')
-      window.location.href = '/login'
+      // the app is mounted at /admin, so a bare /login lands outside it
+      if (!window.location.pathname.endsWith('/login')) {
+        window.location.href = '/admin/login'
+      }
     }
     return Promise.reject(err)
   }

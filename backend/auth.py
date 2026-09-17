@@ -18,7 +18,8 @@ from schemas import TokenData
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production-please")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+# Long enough that the admin is not thrown out in the middle of a departure day.
+ACCESS_TOKEN_EXPIRE_HOURS = 24 * 30
 BOT_API_KEY = os.getenv("BOT_API_KEY", "bot-secret-key")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 INIT_DATA_MAX_AGE_SECONDS = 24 * 3600
