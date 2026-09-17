@@ -26,6 +26,28 @@ services:
     build: ./frontend
     ports:
       - "8080:80"
+    environment:
+      # Second lock on /admin/ (nginx basic auth). Leave both empty locally.
+      ADMIN_BASIC_USER: ${ADMIN_BASIC_USER:-}
+      ADMIN_BASIC_PASSWORD: ${ADMIN_BASIC_PASSWORD:-}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Nightly copy of the database and the photos, kept for 30 days. The target
+  # should be a different disk than ./data — point BACKUP_DIR elsewhere.
+  backup:
+    image: alpine:3.20
+    command: sh /backup.sh
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - ./data:/app/data:ro
+      - ./media:/media:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    environment:
+      TZ: ${TZ:-Europe/Kyiv}
+      BACKUP_HOUR: ${BACKUP_HOUR:-4}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
     depends_on:
       - backend
     restart: unless-stopped

@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
-import models, schemas, notify, storage
+import models, schemas, notify, ratelimit, storage
 from database import get_db
-from auth import require_admin, require_driver, require_staff_or_bot
+from auth import require_admin, require_driver, require_staff_or_bot, trusted_caller
 
 router = APIRouter(prefix="/api/parcels", tags=["parcels"])
 
@@ -38,7 +38,17 @@ def list_parcels(
 
 
 @router.post("", response_model=schemas.ParcelOut)
-def create_parcel(body: schemas.ParcelCreate, db: Session = Depends(get_db)):
+def create_parcel(
+    body: schemas.ParcelCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    trusted: bool = Depends(trusted_caller),
+):
+    if not trusted:
+        wait = ratelimit.public_form.hit(ratelimit.client_ip(request))
+        if wait:
+            raise ratelimit.too_many(wait)
+        body.sender_telegram_id = None
     if not body.receiver_address and not body.np_office:
         raise HTTPException(
             status_code=400,

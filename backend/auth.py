@@ -36,11 +36,15 @@ def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
+def create_access_token(user: models.User, expires_delta: Optional[timedelta] = None) -> str:
     expire = datetime.utcnow() + (expires_delta or timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS))
-    to_encode["exp"] = expire
+    to_encode = {"sub": user.username, "ver": user.token_version, "exp": expire}
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def revoke_all_tokens(user: models.User) -> None:
+    """Every token this user holds stops working; the caller commits."""
+    user.token_version = (user.token_version or 1) + 1
 
 
 def authenticate_user(db: Session, username: str, password: str):
@@ -67,10 +71,11 @@ async def get_current_user(
         if username is None:
             raise exc
         token_data = TokenData(username=username)
+        version = payload.get("ver")
     except JWTError:
         raise exc
     user = db.query(models.User).filter(models.User.username == token_data.username).first()
-    if user is None:
+    if user is None or version != user.token_version:
         raise exc
     return user
 
@@ -136,8 +141,12 @@ async def require_driver_webapp(
     return user
 
 
+def is_bot_key(x_bot_key: Optional[str]) -> bool:
+    return bool(x_bot_key) and hmac.compare_digest(x_bot_key, BOT_API_KEY)
+
+
 def verify_bot_key(x_bot_key: Optional[str] = Security(api_key_header)) -> bool:
-    if x_bot_key == BOT_API_KEY:
+    if is_bot_key(x_bot_key):
         return True
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid bot API key")
 
@@ -152,6 +161,24 @@ async def require_staff_or_bot(
     These endpoints carry names, phones and home addresses, and the API is
     exposed to the internet by the public landing page.
     """
-    if x_bot_key and hmac.compare_digest(x_bot_key, BOT_API_KEY):
+    if is_bot_key(x_bot_key):
         return None
     return await get_current_user(token, db)
+
+
+async def trusted_caller(
+    x_bot_key: Optional[str] = Security(api_key_header),
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> bool:
+    """For endpoints the public may call: True if the bot or a logged-in staff
+    member is calling, False for an anonymous visitor. Never raises."""
+    if is_bot_key(x_bot_key):
+        return True
+    if not token:
+        return False
+    try:
+        await get_current_user(token, db)
+        return True
+    except HTTPException:
+        return False

@@ -17,8 +17,10 @@ export default function Login() {
       const res = await login(username, password)
       localStorage.setItem('token', res.data.access_token)
       navigate('/')
-    } catch {
-      setError('Невірний логін або пароль')
+    } catch (err) {
+      setError(err.response?.status === 429
+        ? (err.response.data?.detail || 'Забагато спроб — зачекайте хвилину')
+        : 'Невірний логін або пароль')
     } finally {
       setLoading(false)
     }

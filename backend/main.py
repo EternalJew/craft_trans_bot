@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse
@@ -18,10 +18,12 @@ import schemas
 import migrate
 import notify
 import parcels_intake
+import ratelimit
+import retention
 import schedule
 import storage
 from auth import authenticate_user, create_access_token
-from routers import routes, rides, bookings, parcels, users, driver, vehicles, notifications, book
+from routers import routes, rides, bookings, parcels, users, driver, vehicles, notifications, book, account
 
 # Create all tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -52,18 +54,39 @@ def top_up_schedule():
         db.close()
 
 
+def forget_old_passengers():
+    db = SessionLocal()
+    try:
+        bookings, parcels = retention.anonymize_old_records(db)
+        if bookings or parcels:
+            print(f"Retention: anonymized {bookings} bookings, {parcels} parcels")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "Europe/Kyiv"))
     scheduler.add_job(queue_day_before_reminders, "cron", hour=REMINDER_HOUR, minute=0)
     scheduler.add_job(top_up_schedule, "cron", hour=3, minute=0)
+    scheduler.add_job(forget_old_passengers, "cron", day=1, hour=4, minute=0)
     scheduler.start()
     top_up_schedule()
     yield
     scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="craft plus API", version="1.0.0", lifespan=lifespan)
+# The interactive API docs are a map of everything; only for local development.
+DEBUG = os.getenv("DEBUG", "0") == "1"
+
+app = FastAPI(
+    title="craft plus API",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs" if DEBUG else None,
+    redoc_url="/redoc" if DEBUG else None,
+    openapi_url="/openapi.json" if DEBUG else None,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -82,6 +105,7 @@ app.include_router(driver.router)
 app.include_router(vehicles.router)
 app.include_router(notifications.router)
 app.include_router(book.router)
+app.include_router(account.router)
 
 os.makedirs(storage.PARCEL_PHOTO_DIR, exist_ok=True)
 app.mount("/media", StaticFiles(directory=storage.MEDIA_ROOT), name="media")
@@ -115,16 +139,23 @@ def public_config(db: Session = Depends(get_db)):
 
 @app.post("/auth/token", response_model=schemas.Token)
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    ip = ratelimit.client_ip(request)
+    wait = ratelimit.login_guard.check(ip)
+    if wait:
+        raise ratelimit.too_many(wait)
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        ratelimit.login_guard.failed(ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
-    token = create_access_token({"sub": user.username})
+    ratelimit.login_guard.succeeded(ip)
+    token = create_access_token(user)
     return {"access_token": token, "token_type": "bearer", "role": user.role}
 
 

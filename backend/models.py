@@ -17,6 +17,9 @@ class User(Base):
     # One-time code behind a t.me/<bot>?start=drv_<code> link. Tapping it in
     # Telegram binds the driver's account to their telegram_id — no password.
     invite_code   = Column(String, unique=True, nullable=True, index=True)
+    # Stamped into every JWT. Bump it and every token issued so far is dead —
+    # that is how a password change or "sign out everywhere" works.
+    token_version = Column(Integer, nullable=False, default=1)
 
     assigned_rides = relationship("Ride", back_populates="driver", foreign_keys="Ride.driver_id")
     vans           = relationship("RideVan", back_populates="driver")

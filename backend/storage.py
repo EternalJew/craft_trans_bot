@@ -13,6 +13,18 @@ PARCEL_PHOTO_DIR = os.path.join(MEDIA_ROOT, "parcels")
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 ALLOWED_EXTENSIONS = {"jpg": ".jpg", "jpeg": ".jpg", "png": ".png", "webp": ".webp"}
+CHUNK = 1024 * 1024
+
+
+def _looks_like(extension: str, head: bytes) -> bool:
+    """The file's first bytes have to agree with its name."""
+    if extension == ".jpg":
+        return head.startswith(b"\xff\xd8\xff")
+    if extension == ".png":
+        return head.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension == ".webp":
+        return head[:4] == b"RIFF" and head[8:12] == b"WEBP"
+    return False
 
 # Ambiguous characters (0/O, 1/I) left out — these get read out over the phone.
 TRACKING_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -27,14 +39,26 @@ def save_parcel_photo(upload: UploadFile) -> str:
     if not extension:
         raise HTTPException(status_code=400, detail="Only jpg, png or webp photos are accepted")
 
-    content = upload.file.read()
-    if len(content) > MAX_PHOTO_BYTES:
-        raise HTTPException(status_code=400, detail="Photo is larger than 10 MB")
+    head = upload.file.read(16)
+    if not _looks_like(extension, head):
+        raise HTTPException(status_code=400, detail="The file is not a jpg, png or webp image")
 
     os.makedirs(PARCEL_PHOTO_DIR, exist_ok=True)
     filename = f"{uuid.uuid4().hex}{extension}"
-    with open(os.path.join(PARCEL_PHOTO_DIR, filename), "wb") as f:
-        f.write(content)
+    path = os.path.join(PARCEL_PHOTO_DIR, filename)
+    # Copy in pieces and stop at the cap, so an oversized upload never sits
+    # whole in memory or on disk.
+    written = 0
+    with open(path, "wb") as f:
+        f.write(head)
+        written += len(head)
+        while chunk := upload.file.read(CHUNK):
+            written += len(chunk)
+            if written > MAX_PHOTO_BYTES:
+                f.close()
+                os.remove(path)
+                raise HTTPException(status_code=400, detail="Photo is larger than 10 MB")
+            f.write(chunk)
     return filename
 
 

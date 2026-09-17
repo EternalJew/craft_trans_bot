@@ -6,6 +6,7 @@ import SplitPage from './pages/Split'
 import ParcelsPage from './pages/Parcels'
 import VehiclesPage from './pages/Vehicles'
 import DriversPage from './pages/Drivers'
+import AccountPage from './pages/Account'
 import Layout from './components/Layout'
 
 function RequireAuth({ children }) {
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="parcels"     element={<ParcelsPage />} />
           <Route path="vehicles"      element={<VehiclesPage />} />
           <Route path="drivers"       element={<DriversPage />} />
+          <Route path="account"       element={<AccountPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -48,3 +48,6 @@ images/
 
 # Hand-made split dataset — real passengers' towns, kept local
 data/splits.txt
+
+# Nightly copies of the database and photos (see backup service)
+backups/

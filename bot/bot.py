@@ -326,7 +326,13 @@ async def cmd_rides(message: types.Message):
 @dp.message(F.text == BTN_BOOK)
 @dp.message(F.text == BTN_DRV_BOOK)
 async def cmd_book(message: types.Message, state: FSMContext):
-    await state.update_data(as_driver=message.text == BTN_DRV_BOOK)
+    # The driver button is just text; anyone can type it. Only a real staff
+    # account gets to file a booking as "driver".
+    as_driver = False
+    if message.text == BTN_DRV_BOOK:
+        user = await staff_user(message.from_user.id)
+        as_driver = bool(user) and user.get("role") in ("driver", "admin")
+    await state.update_data(as_driver=as_driver)
     # Direction first — a mixed list of dates gets people booking the nearest
     # departure even when it goes the other way.
     kb = InlineKeyboardMarkup(inline_keyboard=[

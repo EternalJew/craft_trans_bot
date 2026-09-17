@@ -18,7 +18,8 @@ ADDED_COLUMNS = {
         "entity_id": "INTEGER",
     },
     "users": {
-        "invite_code": "VARCHAR",
+        "invite_code":   "VARCHAR",
+        "token_version": "INTEGER NOT NULL DEFAULT 1",
     },
 }
 

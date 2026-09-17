@@ -1,13 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import models
 import notify
+import ratelimit
 import schemas
 from database import get_db
-from auth import require_staff_or_bot
+from auth import require_staff_or_bot, trusted_caller
+
+# A second submit of the same phone for the same ride inside this window is a
+# correction (or a double-click), not a second family — update, don't add.
+DUPLICATE_WINDOW = timedelta(minutes=10)
 
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 
@@ -33,7 +38,21 @@ def list_bookings(
 
 
 @router.post("", response_model=schemas.BookingOut)
-def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
+def create_booking(
+    body: schemas.BookingCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    trusted: bool = Depends(trusted_caller),
+):
+    if not trusted:
+        # anonymous = the website form; the bot and the admin carry credentials
+        wait = ratelimit.public_form.hit(ratelimit.client_ip(request))
+        if wait:
+            raise ratelimit.too_many(wait)
+        # and it cannot claim to be the driver or the admin
+        body.source = "web"
+        body.telegram_id = None
+
     ride = db.query(models.Ride).filter(models.Ride.id == body.ride_id).with_for_update().first()
     if not ride:
         raise HTTPException(status_code=404, detail="Ride not found")
@@ -63,6 +82,19 @@ def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
                    f"це місто відправлення. Оберіть інший напрямок.",
         )
 
+    if not trusted:
+        recent = _recent_duplicate(db, ride.id, body.phone)
+        if recent:
+            recent.name = body.name
+            recent.from_city, recent.to_city = body.from_city.strip(), body.to_city.strip()
+            recent.from_address, recent.to_address = body.from_address, body.to_address
+            recent.comment = body.comment
+            ride.seats_free += recent.seats - body.seats
+            recent.seats = body.seats
+            db.commit()
+            db.refresh(recent)
+            return recent
+
     booking = models.Booking(
         ride_id=body.ride_id,
         name=body.name,
@@ -87,6 +119,19 @@ def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(booking)
     return booking
+
+
+def _recent_duplicate(db: Session, ride_id: int, phone: str) -> Optional[models.Booking]:
+    wanted = notify.normalize_phone(phone)
+    if not wanted:
+        return None
+    since = datetime.utcnow() - DUPLICATE_WINDOW
+    for b in (db.query(models.Booking)
+                .filter(models.Booking.ride_id == ride_id, models.Booking.created_at >= since)
+                .all()):
+        if notify.normalize_phone(b.phone) == wanted:
+            return b
+    return None
 
 
 @router.patch("/{booking_id}", response_model=schemas.BookingOut)

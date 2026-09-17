@@ -4,11 +4,14 @@ from typing import List
 from datetime import date as date_type
 
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_admin
 import models, schemas
 
 router = APIRouter(prefix="/api/vehicles", tags=["vehicles"])
 
+
+# Drivers may look at the fleet and its service history; only the admin
+# changes it — a van and its maintenance record are not a driver's to delete.
 
 # ── Vehicles ──────────────────────────────────────────────────────────────────
 
@@ -18,7 +21,7 @@ def list_vehicles(db: Session = Depends(get_db), _=Depends(get_current_user)):
 
 
 @router.post("", response_model=schemas.VehicleOut)
-def create_vehicle(data: schemas.VehicleCreate, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def create_vehicle(data: schemas.VehicleCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
     v = models.Vehicle(**data.model_dump())
     db.add(v)
     db.commit()
@@ -27,7 +30,7 @@ def create_vehicle(data: schemas.VehicleCreate, db: Session = Depends(get_db), _
 
 
 @router.patch("/{vehicle_id}", response_model=schemas.VehicleOut)
-def update_vehicle(vehicle_id: int, data: schemas.VehicleUpdate, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def update_vehicle(vehicle_id: int, data: schemas.VehicleUpdate, db: Session = Depends(get_db), _=Depends(require_admin)):
     v = db.get(models.Vehicle, vehicle_id)
     if not v:
         raise HTTPException(404, "Vehicle not found")
@@ -39,7 +42,7 @@ def update_vehicle(vehicle_id: int, data: schemas.VehicleUpdate, db: Session = D
 
 
 @router.delete("/{vehicle_id}")
-def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
     v = db.get(models.Vehicle, vehicle_id)
     if not v:
         raise HTTPException(404, "Vehicle not found")
@@ -64,7 +67,7 @@ def list_maintenance(vehicle_id: int, db: Session = Depends(get_db), _=Depends(g
 
 
 @router.post("/{vehicle_id}/maintenance", response_model=schemas.MaintenanceRecordOut)
-def add_maintenance(vehicle_id: int, data: schemas.MaintenanceRecordCreate, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def add_maintenance(vehicle_id: int, data: schemas.MaintenanceRecordCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
     v = db.get(models.Vehicle, vehicle_id)
     if not v:
         raise HTTPException(404, "Vehicle not found")
@@ -79,7 +82,7 @@ def add_maintenance(vehicle_id: int, data: schemas.MaintenanceRecordCreate, db: 
 
 
 @router.delete("/maintenance/{record_id}")
-def delete_maintenance(record_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def delete_maintenance(record_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
     rec = db.get(models.MaintenanceRecord, record_id)
     if not rec:
         raise HTTPException(404, "Record not found")

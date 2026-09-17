@@ -42,12 +42,22 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <button
-          onClick={logout}
-          className="m-4 py-2 rounded bg-blue-900 hover:bg-blue-800 text-sm"
-        >
-          Вийти
-        </button>
+        <div className="m-4 flex flex-col gap-2">
+          <NavLink
+            to="/account"
+            className={({ isActive }) =>
+              `py-2 text-center rounded text-sm ${isActive ? 'bg-blue-900' : 'text-blue-100 hover:bg-blue-600'}`
+            }
+          >
+            ⚙️ Акаунт
+          </NavLink>
+          <button
+            onClick={logout}
+            className="py-2 rounded bg-blue-900 hover:bg-blue-800 text-sm"
+          >
+            Вийти
+          </button>
+        </div>
       </aside>
 
       {/* Main content */}

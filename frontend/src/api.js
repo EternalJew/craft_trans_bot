@@ -33,6 +33,9 @@ export const login = (username, password) => {
   form.append('password', password)
   return api.post('/auth/token', form)
 }
+export const changePassword   = (current_password, new_password) =>
+  api.post('/auth/change-password', { current_password, new_password })
+export const logoutEverywhere = () => api.post('/auth/logout-all')
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 export const getRoutes  = ()          => api.get('/api/routes')

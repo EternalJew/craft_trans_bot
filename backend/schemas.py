@@ -31,6 +31,15 @@ class UserOut(BaseModel):
 class UserMe(UserOut):
     pass
 
+class DriverPublic(BaseModel):
+    """What a ride may say about its driver on the public /api/rides. Phone,
+    telegram_id and above all invite_code stay in UserOut, which only the
+    admin endpoints return — the invite code alone lets anyone bind the
+    driver's account to their own Telegram."""
+    id:        int
+    full_name: Optional[str] = None
+    model_config = {"from_attributes": True}
+
 
 # ── Stop ──────────────────────────────────────────────────────────────────────
 
@@ -97,7 +106,7 @@ class RideOut(RideBase):
     status:     str
     started_at: Optional[datetime] = None
     driver_id:  Optional[int] = None
-    driver:     Optional[UserOut] = None
+    driver:     Optional[DriverPublic] = None
     route:      RouteShort
     model_config = {"from_attributes": True}
 
@@ -284,3 +293,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password:     str = Field(min_length=8)

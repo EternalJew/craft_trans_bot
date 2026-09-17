@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import models, schemas
 from database import get_db
-from auth import require_admin
+from auth import require_admin, require_staff_or_bot
 
 router = APIRouter(prefix="/api/rides", tags=["rides"])
 
@@ -72,7 +72,8 @@ def delete_ride(ride_id: int, db: Session = Depends(get_db), _=Depends(require_a
 
 
 @router.get("/{ride_id}/bookings", response_model=List[schemas.BookingOut])
-def ride_bookings(ride_id: int, db: Session = Depends(get_db)):
+def ride_bookings(ride_id: int, db: Session = Depends(get_db), _=Depends(require_staff_or_bot)):
+    """The passenger list — names and phones, so never without a login or the bot key."""
     if not db.query(models.Ride).filter(models.Ride.id == ride_id).first():
         raise HTTPException(status_code=404, detail="Ride not found")
     return db.query(models.Booking).filter(models.Booking.ride_id == ride_id).all()
