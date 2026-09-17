@@ -17,6 +17,7 @@ import models
 import schemas
 import migrate
 import notify
+import parcels_intake
 import schedule
 import storage
 from auth import authenticate_user, create_access_token
@@ -101,8 +102,15 @@ def driver_app():
 
 
 @app.get("/api/public/config")
-def public_config():
-    return {"bot_username": os.getenv("BOT_USERNAME", "")}
+def public_config(db: Session = Depends(get_db)):
+    """What the landing and the bot both need to tell a sender where to send."""
+    return {
+        "bot_username": os.getenv("BOT_USERNAME", ""),
+        "parcel_intake": {
+            "UA->CZ": parcels_intake.intake_info(db, "UA->CZ"),
+            "CZ->UA": parcels_intake.intake_info(db, "CZ->UA"),
+        },
+    }
 
 
 @app.post("/auth/token", response_model=schemas.Token)

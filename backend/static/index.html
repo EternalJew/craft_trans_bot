@@ -148,6 +148,13 @@
   .two .lead { font-size: 17px; line-height: 1.65; color: #CFCDCF; margin: 0 0 26px; }
   .bullets { display: grid; gap: 14px; margin-bottom: 28px; }
   .bullets div { display: flex; gap: 12px; align-items: flex-start; font-size: 15.5px; color: #D9D9D9; }
+  .intake { display: grid; gap: 12px; margin-bottom: 22px; }
+  .intake > div { border: 1px solid rgba(217,217,217,.16); border-radius: 12px; padding: 14px 16px; background: #1C1B1C; }
+  .intake b { display: block; font-family: Rubik, sans-serif; font-weight: 500; font-size: 16px; color: #FFFFFF; margin-bottom: 4px; }
+  .intake span { font-size: 14.5px; color: #A9A7A9; line-height: 1.5; }
+  .label-note { font-size: 14.5px; line-height: 1.6; color: #CFCDCF; background: rgba(30,69,193,.12);
+                border-left: 2px solid #1E45C1; border-radius: 0 10px 10px 0; padding: 14px 16px; margin: 0 0 24px; }
+  .label-note b { color: #FFFFFF; }
   .bullets i { width: 6px; height: 6px; border-radius: 50%; background: #1E45C1; display: block; margin-top: 8px; flex: none; }
   .two img { width: 100%; height: 380px; object-fit: cover; border-radius: 16px; display: block; }
   .track { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; max-width: 480px; }
@@ -462,10 +469,28 @@
       <div class="eyebrow">Посилки й передачі</div>
       <h2 style="margin-bottom:18px">Передати рідним — так само просто, як поїхати самому</h2>
       <p class="lead">Беремо документи, ліки, одяг, дрібну техніку й домашні смаколики. Посилка їде тим самим рейсом і потрапляє прямо в руки — без складів і черг.</p>
+      <div class="intake">
+        <div>
+          <b>📦 Новою Поштою</b>
+          <span id="intake-np">Відправляєте на наше відділення — ми забираємо звідти й веземо далі.</span>
+        </div>
+        <div>
+          <b>🚗 Привезти самим</b>
+          <span id="intake-dropoff">Підвозите до нас у Рівному.</span>
+        </div>
+        <div>
+          <b>🏠 Заберемо у вас</b>
+          <span>Рівне й область — водій забере за адресою.</span>
+        </div>
+      </div>
+      <p class="label-note">
+        <b>Підпишіть коробку</b> — місто, адреса й телефон отримувача. Без підпису ми не знатимемо,
+        куди її везти. Бот дасть готовий текст, який лишиться переписати.
+      </p>
       <div class="bullets">
-        <div><i></i><span>Забираємо за адресою або приносьте самі — як зручніше</span></div>
         <div><i></i><span>Фотографуємо при прийомі, видаємо трек-номер</span></div>
         <div><i></i><span>Доставка на адресу в Чехії; в Україні — на адресу або у відділення Нової Пошти</span></div>
+        <div><i></i><span>З Чехії в Україну посилку забирає водій за адресою</span></div>
       </div>
       <a href="#" id="bot-link-parcel" class="btn" hidden>Написати про посилку</a>
       <a href="tel:+380687297990" class="btn ghost" id="parcel-call">Подзвонити про посилку</a>
@@ -687,7 +712,15 @@ $('track-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') tra
 
 (async () => {
   try {
-    const { bot_username } = await getJSON('/api/public/config');
+    const cfg = await getJSON('/api/public/config');
+    const { bot_username } = cfg;
+    const ua = cfg.parcel_intake?.['UA->CZ'] || {};
+    if (ua.np_office) {
+      $('intake-np').textContent = `Відправляєте на ${ua.np_office}`
+        + (ua.np_days ? `, ми забираємо звідти у ${ua.np_days}.` : '.')
+        + (ua.np_deadline_weekday ? ` Щоб поїхало у ${ua.departure_weekday}, посилка має бути там до ${ua.np_deadline_weekday}.` : '');
+    }
+    if (ua.dropoff) $('intake-dropoff').textContent = `Привозите за адресою: ${ua.dropoff}`;
     if (bot_username) {
       const url = `https://t.me/${bot_username}`;
       for (const id of ['bot-link', 'bot-link-parcel', 'bot-link-contacts']) {

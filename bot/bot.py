@@ -134,6 +134,7 @@ class ViewBookingStates(StatesGroup):
 
 class ParcelStates(StatesGroup):
     direction        = State()
+    intake           = State()
     sender           = State()
     sender_phone     = State()
     sender_address   = State()
@@ -748,6 +749,60 @@ async def cmd_parcel(message: types.Message, state: FSMContext):
 async def parcel_direction(callback: types.CallbackQuery, state: FSMContext):
     direction = callback.data.split(":", 1)[1]
     await state.update_data(direction=direction)
+
+    if direction == "CZ->UA":
+        # No Nova Poshta equivalent in Czechia — the driver always collects.
+        await state.update_data(intake="pickup")
+        await state.set_state(ParcelStates.sender)
+        await callback.message.answer(
+            "З Чехії посилку забирає водій за адресою.\n\nПІБ відправника:")
+        await callback.answer()
+        return
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📦 Новою Поштою на ваше відділення", callback_data="parcel_in:np")],
+        [InlineKeyboardButton(text="🚗 Привезу сам у Рівне", callback_data="parcel_in:dropoff")],
+        [InlineKeyboardButton(text="🏠 Заберіть у мене", callback_data="parcel_in:pickup")],
+    ])
+    await state.set_state(ParcelStates.intake)
+    await callback.message.answer("Як передасте посилку?", reply_markup=kb)
+    await callback.answer()
+
+
+async def _intake_info(direction: str) -> dict:
+    try:
+        cfg = await api_get("/api/public/config")
+        return cfg.get("parcel_intake", {}).get(direction, {})
+    except Exception:
+        return {}
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("parcel_in:"))
+async def parcel_intake(callback: types.CallbackQuery, state: FSMContext):
+    kind = callback.data.split(":", 1)[1]
+    await state.update_data(intake=kind)
+    info = await _intake_info("UA->CZ")
+
+    if kind == "np":
+        lines = ["<b>Новою Поштою</b>"]
+        if info.get("np_office"):
+            lines.append(f"Відправляйте на: <b>{esc(info['np_office'])}</b>")
+        if info.get("np_days"):
+            lines.append(f"Забираємо з відділення у {esc(info['np_days'])}.")
+        if info.get("np_deadline_weekday") and info.get("departure_weekday"):
+            lines.append(
+                f"Щоб поїхало у {esc(info['departure_weekday'])} "
+                f"({info['departure'][8:10]}.{info['departure'][5:7]}), "
+                f"посилка має бути на відділенні до {esc(info['np_deadline_weekday'])}."
+            )
+        lines.append("")
+        lines.append("<i>Наприкінці я дам текст, який треба написати на коробці.</i>")
+        await callback.message.answer("\n".join(lines), parse_mode=HTML)
+    elif kind == "dropoff":
+        where = info.get("dropoff") or "адресу скажемо в переписці"
+        await callback.message.answer(
+            f"<b>Привезете самі</b>\nЧекаємо за адресою: {esc(where)}", parse_mode=HTML)
+
     await state.set_state(ParcelStates.sender)
     await callback.message.answer("ПІБ відправника:")
     await callback.answer()
@@ -768,11 +823,17 @@ async def parcel_sender_phone(message: types.Message, state: FSMContext):
         return
     await state.update_data(sender_phone=phone)
     await link_contact(phone, message.from_user)
-    await state.set_state(ParcelStates.sender_address)
-    await message.answer(
-        "Адреса, звідки забрати посилку (місто, вулиця, будинок):",
-        reply_markup=types.ReplyKeyboardRemove(),
-    )
+    # Only a parcel we collect needs an address to collect from; one sent by
+    # Nova Poshta or brought to us does not.
+    if (await state.get_data()).get("intake") == "pickup":
+        await state.set_state(ParcelStates.sender_address)
+        await message.answer(
+            "Адреса, звідки забрати посилку (місто, вулиця, будинок):",
+            reply_markup=types.ReplyKeyboardRemove(),
+        )
+    else:
+        await state.set_state(ParcelStates.receiver)
+        await message.answer("ПІБ отримувача:", reply_markup=types.ReplyKeyboardRemove())
 
 
 @dp.message(StateFilter(ParcelStates.sender_address))
@@ -868,14 +929,31 @@ async def _register_parcel(message: types.Message, state: FSMContext, photo_byte
     await message.answer(
         f"Посилку прийнято!\n\n"
         f"Трек-номер: {parcel['tracking_number']}\n"
-        f"Напрямок: {parcel['direction']}\n"
-        f"Забрати: {parcel.get('sender_address') or '—'}\n"
-        f"Доставка: {destination}\n"
         f"Отримувач: {parcel['receiver']} ({parcel['receiver_phone']})\n"
+        f"Доставка: {destination}\n"
         f"{photo_note}\n"
-        f"Статус можна перевірити командою /track",
+        f"Статус — командою /track",
         reply_markup=public_kb(),
     )
+
+    # The one thing the owner repeats on every call: what to write on the box.
+    if destination != "—":
+        await message.answer(
+            "<b>Підпишіть коробку</b>\n"
+            "<i>Перепишіть це на посилку — без підпису ми не знатимемо, куди її везти:</i>\n\n"
+            f"<code>{esc(destination)}\n{esc(parcel['receiver_phone'])}</code>",
+            parse_mode=HTML,
+        )
+
+    if (await state.get_data()).get("intake") == "np":
+        info = await _intake_info(parcel["direction"])
+        if info.get("np_office"):
+            tail = (f"\nМає бути на відділенні до {esc(info['np_deadline_weekday'])}."
+                    if info.get("np_deadline_weekday") else "")
+            await message.answer(
+                f"Відправляйте на <b>{esc(info['np_office'])}</b>" + tail,
+                parse_mode=HTML,
+            )
     await state.clear()
 
 
@@ -1000,9 +1078,25 @@ async def default_response(message: types.Message):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+BOT_DESCRIPTION = (
+    "craft plus — пасажирські перевезення та посилки Україна ⇄ Чехія.\n\n"
+    "Забираємо з-під дому й довозимо за адресою. Мікроавтобуси на 8 місць.\n"
+    "З України: вівторок, п'ятниця. З Чехії: четвер, неділя.\n\n"
+    "Натисніть «Почати», щоб забронювати місце або відправити посилку."
+)
+
+
+async def _set_if_changed(getter, setter, field, value):
+    """Write a bot profile field only when it differs, and swallow the\nflood-control error Telegram raises when it is written too often."""
+    try:
+        if getattr(await getter(), field, None) != value:
+            await setter(value)
+    except Exception as e:
+        print(f"profile {field}: {type(e).__name__} — лишаємо як є")
+
+
 async def configure_bot():
-    """Commands, profile texts and the menu button — everything Telegram shows
-    around the conversation. /whoami and /driver stay unlisted on purpose."""
+    """Commands, profile texts and the menu button — everything Telegram shows\naround the conversation. /whoami and /driver stay unlisted on purpose."""
     await bot.set_my_commands([
         BotCommand(command="book",           description="🎫 Забронювати місце"),
         BotCommand(command="rides",          description="🗓 Найближчі рейси"),
@@ -1015,19 +1109,19 @@ async def configure_bot():
         BotCommand(command="help",           description="ℹ️ Довідка"),
     ], scope=BotCommandScopeDefault())
 
-    # Shown in an empty chat, before the first message.
-    await bot.set_my_description(
-        "craft plus — пасажирські перевезення та посилки Україна ⇄ Чехія.\n\n"
-        "Забираємо з-під дому й довозимо за адресою. Мікроавтобуси на 8 місць.\n"
-        "З України: вівторок, п'ятниця. З Чехії: четвер, неділя.\n\n"
-        "Натисніть «Почати», щоб забронювати місце або відправити посилку."
-    )
-    # Shown under the bot name in its profile and in search.
-    await bot.set_my_short_description(
-        "Пасажири та посилки Україна ⇄ Чехія. Бронювання за хвилину."
-    )
-    await bot.set_my_name("craft plus")
-    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    # Profile texts rarely change and Telegram rate-limits them hard — SetMyName
+    # allows only a handful of calls a day. Write only what differs, and never
+    # let flood control take the bot down.
+    await _set_if_changed(bot.get_my_name, bot.set_my_name, "name", "craft plus")
+    await _set_if_changed(bot.get_my_short_description, bot.set_my_short_description,
+                          "short_description",
+                          "Пасажири та посилки Україна ⇄ Чехія. Бронювання за хвилину.")
+    await _set_if_changed(bot.get_my_description, bot.set_my_description,
+                          "description", BOT_DESCRIPTION)
+    try:
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    except Exception as e:
+        print(f"menu button: {type(e).__name__}")
 
 
 def notification_kb(note: dict):
