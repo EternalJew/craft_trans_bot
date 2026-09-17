@@ -39,8 +39,10 @@ def create_booking(body: schemas.BookingCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Ride not found")
     if ride.status == "cancelled":
         raise HTTPException(status_code=400, detail="Ride is cancelled")
-    if ride.seats_free < body.seats:
-        raise HTTPException(status_code=400, detail=f"Not enough seats. Available: {ride.seats_free}")
+    # No seat cap. A departure day runs as two or three vans, and the paper book
+    # holds passengers this database never sees — so its own count is a lower
+    # bound, never grounds to turn a real passenger away. seats_free is kept as
+    # a rough indicator and is allowed to go negative.
 
     # Cities are free text, so a village we have never heard of passes. But a
     # city we do know must be on the right end of this ride: boarding in
@@ -100,10 +102,7 @@ def update_booking(
 
     if body.seats is not None:
         ride = db.query(models.Ride).filter(models.Ride.id == booking.ride_id).with_for_update().first()
-        available = ride.seats_free + booking.seats
-        if body.seats > available:
-            raise HTTPException(status_code=400, detail=f"Not enough seats. Max available: {available}")
-        ride.seats_free = available - body.seats
+        ride.seats_free = ride.seats_free + booking.seats - body.seats
         booking.seats = body.seats
 
     if body.comment is not None:
